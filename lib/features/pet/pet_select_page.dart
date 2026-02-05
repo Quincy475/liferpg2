@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:household_rpg/app/session_providers.dart';
-import 'package:household_rpg/data/models/Pet.dart';
+import 'package:household_rpg/data/models/pet.dart';
 
 class PetSelectPage extends ConsumerWidget {
   const PetSelectPage({super.key});

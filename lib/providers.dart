@@ -1,6 +1,6 @@
 import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:household_rpg/scoring/scoring_enginge.dart';
+import 'package:household_rpg/scoring/scoring_engine.dart';
 
 import 'data/repositories/task_repo.dart';
 import 'data/repositories/event_repo.dart';

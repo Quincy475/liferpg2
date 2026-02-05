@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:household_rpg/data/models/enums.dart';
-import 'package:household_rpg/data/models/skillNode.dart'; // bevat SkillType
+import 'package:household_rpg/data/models/skill_node.dart'; // bevat SkillType
 
 // ---- Repo
 class SkillNodeRepository {

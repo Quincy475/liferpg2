@@ -1,8 +1,8 @@
 import 'dart:math';
-import 'package:household_rpg/data/models/Task.dart';
-import 'package:household_rpg/data/models/User_profile.dart';
-import 'package:household_rpg/data/models/Event_card.dart';
-import 'package:household_rpg/data/models/Completion_result.dart';
+import 'package:household_rpg/data/models/task.dart';
+import 'package:household_rpg/data/models/user_profile.dart';
+import 'package:household_rpg/data/models/event_card.dart';
+import 'package:household_rpg/data/models/completion_result.dart';
 import 'package:household_rpg/data/models/enums.dart';
 
 class ScoringEngine {

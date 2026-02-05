@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:household_rpg/data/models/Quest.dart';
+import 'package:household_rpg/data/models/quest.dart';
 import 'package:household_rpg/data/models/models.dart';
 
 /// Gooi deze in dezelfde file of apart.

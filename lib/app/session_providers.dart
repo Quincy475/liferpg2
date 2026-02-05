@@ -9,11 +9,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 // Jouw domein
-import 'package:household_rpg/data/models/Quest.dart'; // jouw Quest-model
-import 'package:household_rpg/data/models/User_profile.dart';
+import 'package:household_rpg/data/models/quest.dart'; // jouw Quest-model
+import 'package:household_rpg/data/models/user_profile.dart';
 import 'package:household_rpg/data/models/models.dart';
 import 'package:household_rpg/data/models/pet.dart';
-import 'package:household_rpg/data/models/skillNode.dart';
+import 'package:household_rpg/data/models/skill_node.dart';
 import 'package:household_rpg/data/repositories/pet_repo.dart';
 import 'package:household_rpg/data/repositories/quest_repo.dart'; // jouw QuestRepository
 import 'package:household_rpg/data/repositories/skill_node_repository.dart';
@@ -23,7 +23,7 @@ import 'package:household_rpg/features/pet/data/furniture_repo.dart';
 import 'package:household_rpg/features/quest/state/quest_controller.dart';
 import 'package:household_rpg/features/skills/domain/node.dart';
 
-import 'package:household_rpg/scoring/scoring_enginge.dart';
+import 'package:household_rpg/scoring/scoring_engine.dart';
 
 // Lokale repos (zoals je had)
 import 'package:household_rpg/data/repositories/task_repo.dart';
@@ -130,19 +130,19 @@ final questControllerProvider = StateNotifierProvider<QuestController, QuestStat
 });
 
 // ---- Providers
-final skillNodeRepoProvider = Provider<SkillNodeRepository>((ref) {
+final skillNodeRepositoryProvider = Provider<SkillNodeRepository>((ref) {
   final db = FirebaseFirestore.instance;
   return SkillNodeRepository(db);
 });
 
 final currentSkillNodesVersionProvider = FutureProvider<String>((ref) async {
-  final repo = ref.read(skillNodeRepoProvider);
+  final repo = ref.read(skillNodeRepositoryProvider);
   final v = await repo.getCurrentVersion();
   return v;
 });
 
 final skillNodesProvider = StreamProvider.family<List<SkillNode>, SkillType>((ref, skill) async* {
-  final repo = ref.read(skillNodeRepoProvider);
+  final repo = ref.read(skillNodeRepositoryProvider);
   final version = await ref.watch(currentSkillNodesVersionProvider.future);
   yield* repo.watchNodesForSkill(version: version, skill: skill);
 });
@@ -233,7 +233,7 @@ final shopRepoProvider = Provider<ShopRepository>((ref) {
 final eventRepoProvider = Provider<EventRepository>((_) => EventRepository());
 final raidRepoProvider = Provider<RaidRepository>((_) => RaidRepository());
 
-final furnitureReppoProvider  = Provider<FurnitureRepo>((_) => FurnitureRepo());
+final furnitureRepoProvider  = Provider<FurnitureRepo>((_) => FurnitureRepo());
 /// ---------------------------------------------------------------------------
 /// Quest state + controller (nu met echte uid uit Firebase i.p.v. const 'me')
 /// ---------------------------------------------------------------------------

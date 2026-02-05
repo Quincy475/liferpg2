@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:household_rpg/data/models/Pet.dart';
+import 'package:household_rpg/data/models/pet.dart';
 
 class PetRepository {
   final FirebaseFirestore _db;

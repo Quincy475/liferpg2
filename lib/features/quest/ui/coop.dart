@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:household_rpg/app/session_providers.dart';
-import 'package:household_rpg/data/models/Quest.dart';
-import 'package:household_rpg/data/models/Skill.dart';
+import 'package:household_rpg/data/models/quest.dart';
+import 'package:household_rpg/data/models/skill.dart';
 import 'package:household_rpg/features/quest/quest_page.dart';
 import 'package:household_rpg/features/quest/ui/member_row.dart';
 import 'package:household_rpg/features/quest/ui/perkament_card.dart';
-import 'package:household_rpg/features/quest/ui/proress_bar.dart';
+import 'package:household_rpg/features/quest/ui/progress_bar.dart';
 
 /// ---------------------------------------------------------------------------
 /// CO-OP LIST + CARD

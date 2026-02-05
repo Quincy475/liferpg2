@@ -1,7 +1,7 @@
 export 'enums.dart';
-export 'Task.dart';
-export 'User_profile.dart';
-export 'Shop_Item.dart';
-export 'Event_card.dart';
-export 'Raidgoal.dart';
-export 'Completion_result.dart';
+export 'task.dart';
+export 'user_profile.dart';
+export 'shop_item.dart';
+export 'event_card.dart';
+export 'raid_goal.dart';
+export 'completion_result.dart';

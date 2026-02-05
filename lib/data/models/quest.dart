@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:household_rpg/data/models/Skill.dart';
+import 'package:household_rpg/data/models/skill.dart';
 import 'package:household_rpg/data/models/models.dart';
 
 // enum SkillType { cooking, cleaning, fixing, laundry, admin }

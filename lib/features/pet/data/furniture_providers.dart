@@ -1,7 +1,7 @@
 // lib/features/pet/data/furniture_providers.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:household_rpg/data/models/userfurniture.dart';
+import 'package:household_rpg/data/models/user_furniture.dart';
 import 'furniture_repo.dart';
 
 final furnitureRepoProvider = Provider<FurnitureRepo>((ref) {

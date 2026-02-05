@@ -1,6 +1,6 @@
 import 'package:collection/collection.dart';
 import 'package:household_rpg/data/local/hive_boxes.dart';
-import 'package:household_rpg/data/models/Task.dart';
+import 'package:household_rpg/data/models/task.dart';
 import 'package:household_rpg/data/models/enums.dart';
 
 class TaskRepository {

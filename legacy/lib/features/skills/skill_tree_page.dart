@@ -4,7 +4,7 @@ import 'package:collection/collection.dart';
 
 import 'package:household_rpg/app/session_providers.dart';
 import 'package:household_rpg/data/models/models.dart'; // bevat SkillType + fsUserRepoProvider
-import 'package:household_rpg/data/models/skillNode.dart';
+import 'package:household_rpg/data/models/skill_node.dart';
 import 'package:household_rpg/features/skills/domain/node.dart';
 
 class SkillTreePage extends ConsumerWidget {

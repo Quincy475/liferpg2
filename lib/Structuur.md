@@ -9,24 +9,24 @@
   - Auth/session bootstrap
   - Current user + guild streams
   - Theme provider
-  - Quest/shop/pet related providers
+  - Quest/shop/pet-gerelateerde providers
 
 ## Data laag
-- `lib/data/models/` → domeinmodellen (quest, user, pet, shop, skills, etc.).
+- `lib/data/models/` → domeinmodellen (snake_case bestandsnamen).
 - `lib/data/repositories/` → Firestore/local data toegang.
 - `lib/data/local/` → Hive box setup/persistente settings.
 
-## Features
+## Features (actief in hoofd-navigatie)
 - `lib/features/quest/` → dailies/co-op board, cooldown, rewards.
 - `lib/features/shop/` → shop-overzicht / aankopen.
 - `lib/features/profile/` → profiel + instellingen.
 - `lib/features/pet/` → pet-selectie, room game, inventory overlay.
 
-## Nog aanwezig maar momenteel niet in hoofd-navigatie
-- leaderboard, raid, loot, event, skills, tasks modules.
-- Deze zijn kandidaat voor herintroductie of cleanup/archive.
+## Legacy code
+- Niet-gebruikte bestanden staan onder `legacy/lib/...` met originele structuur.
+- Doel: ruis uit actieve code houden, terwijl oude implementaties bewaard blijven.
 
-## Aanbevolen toekomstige mappen
-- `docs/` → roadmap + architectuur + productkeuzes.
-- `lib/features/economy/` (optioneel) → centrale coin/inventory transactielogica.
-- `lib/features/pet/progression/` (optioneel) → mood/progression/animatie regels.
+## Naming conventies (Fase A)
+- Bestandsnamen in `snake_case.dart`.
+- Modellen in `PascalCase` classnamen, bestand in snake_case.
+- Providers/variabelen met duidelijke, foutloze namen (bijv. `furnitureRepoProvider`).

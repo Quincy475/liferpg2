@@ -6,7 +6,7 @@ import 'package:flame/game.dart';
 import 'package:flame/image_composition.dart';
 import 'package:flame/sprite.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:household_rpg/data/models/Pet.dart';
+import 'package:household_rpg/data/models/pet.dart';
 
 import 'package:household_rpg/features/pet/game/bowl_component.dart';
 import 'package:household_rpg/features/pet/game/bowls_atlas.dart';

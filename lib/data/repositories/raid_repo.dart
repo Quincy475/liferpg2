@@ -1,6 +1,6 @@
 import 'package:household_rpg/core/utils.dart';
 import 'package:household_rpg/data/local/hive_boxes.dart';
-import 'package:household_rpg/data/models/Raidgoal.dart';
+import 'package:household_rpg/data/models/raid_goal.dart';
 
 class RaidRepository {
   static const String kRaidKey = 'activeRaid';

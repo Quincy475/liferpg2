@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:household_rpg/data/models/models.dart';
-import 'package:household_rpg/data/models/skillNode.dart';
+import 'package:household_rpg/data/models/skill_node.dart';
 import 'package:household_rpg/features/skills/domain/node.dart';
 
 class SkillTreeRepository {

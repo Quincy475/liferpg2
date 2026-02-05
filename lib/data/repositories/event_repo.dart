@@ -1,7 +1,7 @@
 
 
 import 'package:household_rpg/data/local/hive_boxes.dart';
-import 'package:household_rpg/data/models/Event_card.dart';
+import 'package:household_rpg/data/models/event_card.dart';
 
 class EventRepository {
   Future<List<EventCard>> activeEvents() async {

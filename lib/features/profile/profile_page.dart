@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:household_rpg/app/session_providers.dart';
 import 'package:household_rpg/config/furniture.dart';
-import 'package:household_rpg/data/models/User_profile.dart';
+import 'package:household_rpg/data/models/user_profile.dart';
 import 'package:household_rpg/data/models/models.dart';
 import 'package:household_rpg/features/pet/data/furniture_providers.dart';
 
@@ -616,7 +616,7 @@ class _DevToolsSection extends ConsumerWidget {
           ),
           ElevatedButton(
             onPressed: () async {
-              await ref.read(furnitureReppoProvider).seedFurnitureForUser(me.id);
+              await ref.read(furnitureRepoProvider).seedFurnitureForUser(me.id);
             },
             child: const Text('Seed furniture config'),
           )

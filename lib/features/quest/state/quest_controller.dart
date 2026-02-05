@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:household_rpg/data/models/Quest.dart';
+import 'package:household_rpg/data/models/quest.dart';
 import 'package:household_rpg/data/models/models.dart';
 import 'package:household_rpg/data/repositories/quest_repo.dart';
 

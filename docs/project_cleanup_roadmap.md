@@ -66,9 +66,9 @@ Kandidaten:
 
 ## Fase A — Stabiliseren (nu)
 Doel: sneller itereren zonder ruis.
-- [ ] Dode code opruimen en `legacy/` map maken.
-- [ ] Documentatie actualiseren (deze file + structuurbestand).
-- [ ] Naming cleanup: typo-bestanden en consistenter modelnamen.
+- [x] Dode code opgeruimd en verplaatst naar `legacy/` map.
+- [x] Documentatie geactualiseerd (roadmap + structuurbestand).
+- [x] Naming cleanup gedaan: typo-bestanden/variabelen verbeterd en modelnamen consistenter gemaakt.
 
 ## Fase B — MVP economy loop
 Doel: “tasks → coins/xp → shop → pet beleving”.

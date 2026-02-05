@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:household_rpg/data/models/Shop_Item.dart';
+import 'package:household_rpg/data/models/shop_item.dart';
 
 class ShopRepository {
   final FirebaseFirestore _db;
