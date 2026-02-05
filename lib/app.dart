@@ -1,13 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:household_rpg/features/quest/quest_page.dart';
-import 'package:household_rpg/features/skills/skills_overview_page.dart';
-import 'features/loot/loot_page.dart';
 import 'features/shop/shop_page.dart';
-import 'features/leaderboard/leaderboard_page.dart';
-import 'features/raid/raid_page.dart';
-import 'features/skills/skills_page.dart';
-import 'features/event/event_page.dart';
 import 'features/profile/profile_page.dart';
 import 'features/pet/pet_page.dart';
 import 'providers.dart';

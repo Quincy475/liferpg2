@@ -1,13 +1,8 @@
 import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:household_rpg/data/models/Quest.dart';
-import 'package:household_rpg/data/models/models.dart';
-import 'package:household_rpg/data/repositories/quest_repo.dart';
 import 'package:household_rpg/scoring/scoring_enginge.dart';
 
 import 'data/repositories/task_repo.dart';
-import 'data/repositories/user_repo.dart';
-import 'data/repositories/shop_repo.dart';
 import 'data/repositories/event_repo.dart';
 import 'data/repositories/raid_repo.dart';
 // ⬆️ bovenaan
