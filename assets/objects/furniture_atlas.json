@@ -1,0 +1,64 @@
+{
+
+    "tower_beige": {
+      "src": { "x": 190, "y": 16, "w": 64, "h": 110 },
+      "pivot": { "x": 0.5, "y": 1.0 },
+      "worldSize": { "w": 64, "h": 388 },
+      "zBias": 0,
+      "scale": 1.0
+    },
+
+
+       "tower_green": {
+      "src": { "x": 372, "y": 16, "w": 64, "h": 110 },
+      "pivot": { "x": 0.5, "y": 1.0 },
+      "worldSize": { "w": 64, "h": 388 },
+      "zBias": 0,
+      "scale": 1.0
+    },
+
+     "tower_blue": {
+      "src": { "x": 392, "y": 16, "w": 64, "h": 110 },
+      "pivot": { "x": 0.5, "y": 1.0 },
+      "worldSize": { "w": 64, "h": 388 },
+      "zBias": 0,
+      "scale": 1.0
+    },
+    "plant_small": {
+      "src": { "x": 140, "y": 300, "w": 45, "h": 110 },
+      "pivot": { "x": 0.5, "y": 1.0 },
+      "worldSize": { "w": 45, "h": 110  },
+      "zBias": 0,
+      "scale": 1.0
+    },
+
+  
+ "window_gray": {
+  "src": { "x": 19, "y": 96, "w": 61, "h": 95 },
+  "pivot": { "x": 0.5, "y": 0.5 },
+  "worldSize": { "w": 61, "h": 95 },
+  "zBias": 0,
+  "scale": 1.0
+},
+"window_white": {
+  "src": { "x": 19, "y": 0, "w": 61, "h": 95 },
+  "pivot": { "x": 0.5, "y": 0.5 },
+  "worldSize": { "w": 61, "h": 95 },
+  "zBias": 0,
+  "scale": 1.0
+},
+"window_brown": {
+  "src": { "x": 115, "y": 0, "w": 61, "h": 95 },
+  "pivot": { "x": 0.5, "y": 0.5 },
+  "worldSize": { "w": 61, "h": 95 },
+  "zBias": 0,
+  "scale": 1.0
+},
+"window_wood": {
+  "src": { "x": 115, "y": 96, "w": 61, "h": 95 },
+  "pivot": { "x": 0.5, "y": 0.5 },
+  "worldSize": { "w": 61, "h": 95 },
+  "zBias": 0,
+  "scale": 1.0
+}
+}

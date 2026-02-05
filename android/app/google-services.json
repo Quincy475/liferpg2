@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "431152355829",
+    "project_id": "liferpg-2f2ae",
+    "storage_bucket": "liferpg-2f2ae.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:431152355829:android:c256a2a89a952799cf28bc",
+        "android_client_info": {
+          "package_name": "com.example.liferpg2"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBbCYFep0OXXIOrYPV6hY8tiYWQGFSuWr4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
