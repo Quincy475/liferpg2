@@ -1,18 +1,19 @@
 class ShopItem {
   final String id;
-  final String name;
-  final String description;        // korte tekst in de UI
-  final String icon;               // emoji of icon code
-  final int price;                 // aantal coins
-  final bool isGuildItem;          // true = gedeelde upgrade
-  final bool isSpecial;            // limited/rare items
-  final String rarity;             // "common", "rare", "epic", "legendary"
-  final String category;           // bijv. "decoration", "buff", "utility"
-  final String? requiresTicketId;  // bijv. "golden_ticket" voor special unlocks
+  final String title;
+  final String description;
+  final String icon;
+  final int price;
+  final bool isGuildItem;
+  final bool isSpecial;
+  final String rarity;
+  final String category;
+  final String? requiresTicketId;
+  final List<String> buyableFor;
 
   const ShopItem({
     required this.id,
-    required this.name,
+    required this.title,
     required this.description,
     required this.icon,
     required this.price,
@@ -21,26 +22,29 @@ class ShopItem {
     this.rarity = 'common',
     this.category = 'general',
     this.requiresTicketId,
+    this.buyableFor = const [],
   });
 
-  // 🧭 Factory: van Map naar model
+  String get name => title;
+
   static ShopItem fromMap(Map<String, dynamic> m) => ShopItem(
         id: m['id'] ?? '',
-        name: m['name'] ?? 'Unknown',
+        title: (m['title'] ?? m['name'] ?? 'Unknown').toString(),
         description: m['description'] ?? '',
         icon: m['icon'] ?? '❔',
-        price: m['price'] ?? 0,
+        price: (m['price'] as num?)?.toInt() ?? 0,
         isGuildItem: m['isGuildItem'] ?? false,
         isSpecial: m['isSpecial'] ?? false,
         rarity: m['rarity'] ?? 'common',
         category: m['category'] ?? 'general',
         requiresTicketId: m['requiresTicketId'],
+        buyableFor: List<String>.from(m['buyableFor'] ?? const <String>[]),
       );
 
-  // 🔄 Map converter
   Map<String, dynamic> toMap() => {
         'id': id,
-        'name': name,
+        'title': title,
+        'name': title,
         'description': description,
         'icon': icon,
         'price': price,
@@ -49,9 +53,9 @@ class ShopItem {
         'rarity': rarity,
         'category': category,
         'requiresTicketId': requiresTicketId,
+        'buyableFor': buyableFor,
       };
 
-  // 🎨 Kleur-helpers voor UI
   static String rarityLabel(String rarity) {
     switch (rarity) {
       case 'rare':
@@ -68,17 +72,16 @@ class ShopItem {
   static int rarityColor(String rarity) {
     switch (rarity) {
       case 'rare':
-        return 0xFF64B5F6; // blauw
+        return 0xFF64B5F6;
       case 'epic':
-        return 0xFFAB47BC; // paars
+        return 0xFFAB47BC;
       case 'legendary':
-        return 0xFFFFC107; // goud
+        return 0xFFFFC107;
       default:
-        return 0xFFBDBDBD; // grijs
+        return 0xFFBDBDBD;
     }
   }
 
-  // 🧠 Logische helper
   bool canBeBoughtWith(String? ticketId) {
     if (requiresTicketId == null) return true;
     return requiresTicketId == ticketId;

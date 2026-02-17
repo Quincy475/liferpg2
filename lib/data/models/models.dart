@@ -5,3 +5,6 @@ export 'Shop_Item.dart';
 export 'Event_card.dart';
 export 'Raidgoal.dart';
 export 'Completion_result.dart';
+export 'task_template.dart';
+export 'task_instance.dart';
+export 'task_event.dart';
