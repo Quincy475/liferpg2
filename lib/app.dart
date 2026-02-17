@@ -4,6 +4,7 @@ import 'package:household_rpg/app/session_providers.dart';
 import 'package:household_rpg/features/profile/profile_page.dart';
 import 'package:household_rpg/features/shop/shop_page.dart';
 import 'package:household_rpg/features/tasks/tasks_page.dart';
+import 'package:household_rpg/theme/app_theme.dart';
 
 class HouseholdRPGApp extends ConsumerWidget {
   const HouseholdRPGApp({super.key});
@@ -14,16 +15,8 @@ class HouseholdRPGApp extends ConsumerWidget {
     return MaterialApp(
       title: 'Household RPG MVP',
       themeMode: theme.mode,
-      theme: ThemeData(
-        colorSchemeSeed: theme.seedColor,
-        useMaterial3: true,
-        brightness: Brightness.light,
-      ),
-      darkTheme: ThemeData(
-        colorSchemeSeed: theme.seedColor,
-        useMaterial3: true,
-        brightness: Brightness.dark,
-      ),
+      theme: buildRpgLightTheme(theme.seedColor),
+      darkTheme: buildRpgTheme(theme.seedColor),
       home: const _HomeShell(),
     );
   }

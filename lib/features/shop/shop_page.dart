@@ -45,7 +45,7 @@ class ShopPage extends ConsumerWidget {
                       const SizedBox(width: 10),
                       const Expanded(
                         child: Text(
-                          'MVP shopitems zijn guild-scoped.',
+                          'Coins uit tasks kun je hier direct uitgeven.',
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -60,6 +60,7 @@ class ShopPage extends ConsumerWidget {
                       if (items.isEmpty) {
                         return const Center(child: Text('Nog geen shopitems. Voeg er één toe met +'));
                       }
+
                       return ListView.builder(
                         itemCount: items.length,
                         itemBuilder: (c, i) {
@@ -68,39 +69,53 @@ class ShopPage extends ConsumerWidget {
                             margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                             child: Padding(
                               padding: const EdgeInsets.all(12),
-                              child: Row(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(item.icon, style: const TextStyle(fontSize: 24)),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(item.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                                        Text(item.description, maxLines: 2, overflow: TextOverflow.ellipsis),
-                                        Text('${item.price} coins'),
-                                      ],
-                                    ),
+                                  Row(
+                                    children: [
+                                      Text(item.icon, style: const TextStyle(fontSize: 24)),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              item.name,
+                                              style: const TextStyle(fontWeight: FontWeight.w700),
+                                            ),
+                                            Text(
+                                              item.description,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Text('${item.price} 🪙'),
+                                    ],
                                   ),
-                                  PopupMenuButton<String>(
-                                    onSelected: (v) async {
-                                      if (v == 'buy') {
-                                        await _buy(context, ref, me, item);
-                                      }
-                                      if (v == 'edit') {
-                                        await _openItemDialog(context, ref, me.guildId!, existing: item);
-                                      }
-                                      if (v == 'delete') {
-                                        await ref.read(shopRepoProvider).archiveGuildShopItem(
+                                  const SizedBox(height: 10),
+                                  Row(
+                                    children: [
+                                      FilledButton.icon(
+                                        onPressed: () => _buyWithConfirm(context, ref, me, item),
+                                        icon: const Icon(Icons.shopping_bag_outlined),
+                                        label: const Text('Buy'),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      OutlinedButton(
+                                        onPressed: () => _openItemDialog(context, ref, me.guildId!, existing: item),
+                                        child: const Text('Edit'),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      TextButton(
+                                        onPressed: () => ref.read(shopRepoProvider).archiveGuildShopItem(
                                               guildId: me.guildId!,
                                               itemId: item.id,
-                                            );
-                                      }
-                                    },
-                                    itemBuilder: (_) => const [
-                                      PopupMenuItem(value: 'buy', child: Text('Buy')),
-                                      PopupMenuItem(value: 'edit', child: Text('Edit')),
-                                      PopupMenuItem(value: 'delete', child: Text('Delete')),
+                                            ),
+                                        child: const Text('Delete'),
+                                      ),
                                     ],
                                   ),
                                 ],
@@ -118,6 +133,23 @@ class ShopPage extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _buyWithConfirm(BuildContext context, WidgetRef ref, UserProfile me, ShopItem item) async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Aankoop bevestigen'),
+        content: Text('Weet je zeker dat je ${item.name} wil kopen voor ${item.price} coins?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Buy')),
+        ],
+      ),
+    );
+
+    if (yes != true) return;
+    await _buy(context, ref, me, item);
   }
 
   Future<void> _buy(BuildContext context, WidgetRef ref, UserProfile me, ShopItem item) async {

@@ -38,7 +38,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
         actions: [
           IconButton(
             tooltip: 'Nieuw template',
-            onPressed: () => _openTemplateDialog(context),
+            onPressed: () => _openTemplateEditDialog(context),
             icon: const Icon(Icons.add),
           ),
         ],
@@ -99,7 +99,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                     error: (_, __) => const SizedBox.shrink(),
                     data: (templates) => _TemplateScroller(
                       templates: templates,
-                      onEdit: (t) => _openTemplateDialog(context, existing: t),
+                      onEdit: (t) => _openTemplateEditDialog(context, existing: t),
                       onArchive: (id) async {
                         await ref.read(taskMvpRepoProvider).archiveTemplate(
                               guildId: me.guildId!,
@@ -149,27 +149,52 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                   child: SegmentedButton<TaskViewMode>(
                     segments: const [
                       ButtonSegment(value: TaskViewMode.board, label: Text('Board')),
-                      ButtonSegment(value: TaskViewMode.week, label: Text('Week')),
+                      ButtonSegment(value: TaskViewMode.week, label: Text('Planner')),
                     ],
                     selected: {_viewMode},
                     onSelectionChanged: (v) => setState(() => _viewMode = v.first),
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
-              IconButton(
-                onPressed: () => setState(() => _weekAnchor = _weekAnchor.subtract(const Duration(days: 7))),
-                icon: const Icon(Icons.chevron_left),
-              ),
-              Flexible(
-                child: Text(
-                  DateFormat('dd MMM').format(_weekStart),
-                  overflow: TextOverflow.ellipsis,
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(999),
+                  color: Theme.of(context).colorScheme.surfaceContainerHigh,
                 ),
-              ),
-              IconButton(
-                onPressed: () => setState(() => _weekAnchor = _weekAnchor.add(const Duration(days: 7))),
-                icon: const Icon(Icons.chevron_right),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                      iconSize: 18,
+                      onPressed: () => setState(
+                        () => _weekAnchor = _weekAnchor.subtract(const Duration(days: 7)),
+                      ),
+                      icon: const Icon(Icons.chevron_left),
+                    ),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 74),
+                      child: Text(
+                        DateFormat('dd MMM').format(_weekStart),
+                        textAlign: TextAlign.center,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                      iconSize: 18,
+                      onPressed: () => setState(
+                        () => _weekAnchor = _weekAnchor.add(const Duration(days: 7)),
+                      ),
+                      icon: const Icon(Icons.chevron_right),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -255,6 +280,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
 
   Future<void> _openTaskDetails(BuildContext context, String guildId, TaskInstance instance) async {
     final templates = await ref.read(taskMvpRepoProvider).watchTemplates(guildId).first;
+
     TaskTemplate? template;
     for (final t in templates) {
       if (t.id == instance.templateId) {
@@ -268,10 +294,57 @@ class _TasksPageState extends ConsumerState<TasksPage> {
       return;
     }
 
-    await _openTemplateDialog(context, existing: template, allowDelete: true);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(template!.title, style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 10),
+                Text('Description', style: Theme.of(context).textTheme.labelLarge),
+                const SizedBox(height: 6),
+                Text(
+                  template.description.trim().isEmpty
+                      ? 'Deze task heeft nog geen description.'
+                      : template.description,
+                ),
+                const SizedBox(height: 10),
+                Text('Schedule: ${template.scheduleType.name} • interval ${template.intervalValue}'),
+                Text('Coins: ${template.coinsBase}'),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        _openTemplateEditDialog(context, existing: template, allowDelete: true);
+                      },
+                      icon: const Icon(Icons.edit),
+                      label: const Text('Edit'),
+                    ),
+                    FilledButton(
+                      onPressed: () => Navigator.pop(sheetContext),
+                      child: const Text('Close'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
-  Future<void> _openTemplateDialog(
+  Future<void> _openTemplateEditDialog(
     BuildContext context, {
     TaskTemplate? existing,
     bool allowDelete = false,
@@ -289,7 +362,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
       context: context,
       builder: (c) => StatefulBuilder(
         builder: (c, setS) => AlertDialog(
-          title: Text(existing == null ? 'Nieuw task template' : 'Task openen/bewerken'),
+          title: Text(existing == null ? 'Nieuw task template' : 'Task bewerken'),
           content: SingleChildScrollView(
             child: Column(
               children: [
@@ -365,7 +438,6 @@ class _TasksPageState extends ConsumerState<TasksPage> {
     setState(() {});
   }
 }
-
 
 final _templatesProvider = StreamProvider.autoDispose.family<List<TaskTemplate>, String>((ref, gid) {
   return ref.read(taskMvpRepoProvider).watchTemplates(gid);
@@ -482,6 +554,7 @@ class _TaskCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final canClaim = i.status == TaskInstanceStatus.open || i.status == TaskInstanceStatus.claimed;
     final canComplete = i.status != TaskInstanceStatus.completed && i.status != TaskInstanceStatus.missed;
+    final hasDescription = i.description.trim().isNotEmpty;
 
     return Card(
       child: Padding(
@@ -492,11 +565,14 @@ class _TaskCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(child: Text(i.title, style: const TextStyle(fontWeight: FontWeight.w700))),
+                if (hasDescription)
+                  const Tooltip(message: 'Heeft description', child: Icon(Icons.notes_rounded, size: 18))
+                else
+                  const Tooltip(message: 'Lege description', child: Icon(Icons.notes_off_outlined, size: 18)),
+                const SizedBox(width: 8),
                 _StatusPill(status: i.status),
               ],
             ),
-            const SizedBox(height: 4),
-            Text(i.description, maxLines: 2, overflow: TextOverflow.ellipsis),
             const SizedBox(height: 8),
             Text('🪙 ${i.coinsAwarded} • due ${DateFormat('EEE HH:mm').format(i.dueAt)}'),
             if (i.claimedByUserId != null)

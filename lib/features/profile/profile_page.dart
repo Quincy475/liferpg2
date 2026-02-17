@@ -30,6 +30,8 @@ class ProfilePage extends ConsumerWidget {
                 const SizedBox(height: 12),
                 _StatsCard(me: me),
                 const SizedBox(height: 12),
+                const _ThemeCard(),
+                const SizedBox(height: 12),
                 if (me.guildId != null) _GuildLeaderboard(guildId: me.guildId!),
                 const SizedBox(height: 12),
                 if (me.guildId != null) _ActivityCard(guildId: me.guildId!),
@@ -164,6 +166,56 @@ class _GuildCard extends ConsumerWidget {
     );
     if (ok != true || c.text.trim().isEmpty) return;
     await ref.read(fsUserRepoProvider).joinByInviteCode(uid: me.id, inviteCode: c.text.trim().toUpperCase());
+  }
+}
+
+
+class _ThemeCard extends ConsumerWidget {
+  const _ThemeCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(themeProvider);
+    final ctrl = ref.read(themeProvider.notifier);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Theme', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            SegmentedButton<ThemeMode>(
+              segments: const [
+                ButtonSegment(value: ThemeMode.system, label: Text('System')),
+                ButtonSegment(value: ThemeMode.light, label: Text('Light')),
+                ButtonSegment(value: ThemeMode.dark, label: Text('Dark')),
+              ],
+              selected: {state.mode},
+              onSelectionChanged: (s) => ctrl.setMode(s.first),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              children: [
+                for (final c in [Colors.teal, Colors.purple, Colors.indigo, Colors.orange])
+                  GestureDetector(
+                    onTap: () => ctrl.setSeed(c),
+                    child: CircleAvatar(
+                      radius: 14,
+                      backgroundColor: c,
+                      child: state.seedColor.value == c.value
+                          ? const Icon(Icons.check, size: 14, color: Colors.white)
+                          : null,
+                    ),
+                  ),
+              ],
+            )
+          ],
+        ),
+      ),
+    );
   }
 }
 
