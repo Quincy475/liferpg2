@@ -96,7 +96,7 @@ ThemeData buildRpgLightTheme(Color seed) {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: base.colorScheme.surfaceContainerHighest.withOpacity(0.7),
+      fillColor: base.colorScheme.surface.withOpacity(0.7),
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
     ),
   );

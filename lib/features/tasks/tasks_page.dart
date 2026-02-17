@@ -6,6 +6,7 @@ import 'package:household_rpg/data/models/models.dart';
 import 'package:household_rpg/data/repositories/task_mvp_repo.dart';
 
 enum TaskViewMode { board, week }
+
 enum TaskFilterMode { all, mine, unclaimed }
 
 class TasksPage extends ConsumerStatefulWidget {
@@ -93,7 +94,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                   ),
                 ),
                 Container(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  color: Theme.of(context).colorScheme.surface,
                   child: templatesAsync.when(
                     loading: () => const SizedBox.shrink(),
                     error: (_, __) => const SizedBox.shrink(),
@@ -161,7 +162,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(999),
-                  color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                  color: Theme.of(context).colorScheme.surface,
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -258,7 +259,9 @@ class _TasksPageState extends ConsumerState<TasksPage> {
 
   Future<void> _claim(String guildId, String meId, String instanceId) async {
     try {
-      await ref.read(taskMvpRepoProvider).claimInstance(guildId: guildId, instanceId: instanceId, userId: meId);
+      await ref
+          .read(taskMvpRepoProvider)
+          .claimInstance(guildId: guildId, instanceId: instanceId, userId: meId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task geclaimd.')));
     } catch (e) {
@@ -269,9 +272,12 @@ class _TasksPageState extends ConsumerState<TasksPage> {
 
   Future<void> _complete(String guildId, String meId, String instanceId) async {
     try {
-      await ref.read(taskMvpRepoProvider).completeInstance(guildId: guildId, instanceId: instanceId, userId: meId);
+      await ref
+          .read(taskMvpRepoProvider)
+          .completeInstance(guildId: guildId, instanceId: instanceId, userId: meId);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task voltooid + coins.')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Task voltooid + coins.')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Complete mislukt: $e')));
@@ -290,7 +296,8 @@ class _TasksPageState extends ConsumerState<TasksPage> {
     }
     if (template == null) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Template niet gevonden.')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Template niet gevonden.')));
       return;
     }
 
@@ -316,7 +323,8 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                       : template.description,
                 ),
                 const SizedBox(height: 10),
-                Text('Schedule: ${template.scheduleType.name} • interval ${template.intervalValue}'),
+                Text(
+                    'Schedule: ${template.scheduleType.name} • interval ${template.intervalValue}'),
                 Text('Coins: ${template.coinsBase}'),
                 const SizedBox(height: 16),
                 Wrap(
@@ -366,8 +374,10 @@ class _TasksPageState extends ConsumerState<TasksPage> {
           content: SingleChildScrollView(
             child: Column(
               children: [
-                TextField(controller: titleC, decoration: const InputDecoration(labelText: 'Title')),
-                TextField(controller: descC, decoration: const InputDecoration(labelText: 'Description')),
+                TextField(
+                    controller: titleC, decoration: const InputDecoration(labelText: 'Title')),
+                TextField(
+                    controller: descC, decoration: const InputDecoration(labelText: 'Description')),
                 TextField(
                   controller: coinC,
                   keyboardType: TextInputType.number,
@@ -405,7 +415,9 @@ class _TasksPageState extends ConsumerState<TasksPage> {
     if (action == null || action == 'cancel') return;
 
     if (action == 'delete' && existing != null) {
-      await ref.read(taskMvpRepoProvider).archiveTemplate(guildId: me.guildId!, templateId: existing.id);
+      await ref
+          .read(taskMvpRepoProvider)
+          .archiveTemplate(guildId: me.guildId!, templateId: existing.id);
       await _refreshWeek(guildId: me.guildId!);
       _lastBootstrapKey = null;
       if (!mounted) return;
@@ -439,13 +451,15 @@ class _TasksPageState extends ConsumerState<TasksPage> {
   }
 }
 
-final _templatesProvider = StreamProvider.autoDispose.family<List<TaskTemplate>, String>((ref, gid) {
+final _templatesProvider =
+    StreamProvider.autoDispose.family<List<TaskTemplate>, String>((ref, gid) {
   return ref.read(taskMvpRepoProvider).watchTemplates(gid);
 });
 
 typedef _WeekArg = ({String guildId, DateTime start, DateTime end});
 
-final _weekInstancesProvider = StreamProvider.autoDispose.family<List<TaskInstance>, _WeekArg>((ref, arg) {
+final _weekInstancesProvider =
+    StreamProvider.autoDispose.family<List<TaskInstance>, _WeekArg>((ref, arg) {
   return ref.read(taskMvpRepoProvider).watchWeekInstances(
         guildId: arg.guildId,
         weekStart: arg.start,
@@ -553,7 +567,8 @@ class _TaskCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final canClaim = i.status == TaskInstanceStatus.open || i.status == TaskInstanceStatus.claimed;
-    final canComplete = i.status != TaskInstanceStatus.completed && i.status != TaskInstanceStatus.missed;
+    final canComplete =
+        i.status != TaskInstanceStatus.completed && i.status != TaskInstanceStatus.missed;
     final hasDescription = i.description.trim().isNotEmpty;
 
     return Card(
@@ -566,9 +581,10 @@ class _TaskCard extends StatelessWidget {
               children: [
                 Expanded(child: Text(i.title, style: const TextStyle(fontWeight: FontWeight.w700))),
                 if (hasDescription)
-                  const Tooltip(message: 'Heeft description', child: Icon(Icons.notes_rounded, size: 18))
+                  const Tooltip(
+                      message: 'Heeft description', child: Icon(Icons.notes_rounded, size: 18))
                 else
-                  const Tooltip(message: 'Lege description', child: Icon(Icons.notes_off_outlined, size: 18)),
+                  const Tooltip(message: 'Lege description', child: Icon(Icons.notes, size: 18)),
                 const SizedBox(width: 8),
                 _StatusPill(status: i.status),
               ],
@@ -654,8 +670,11 @@ class _TemplateScroller extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(t.title, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-                      Text('${t.scheduleType.name} • ${t.coinsBase} coins', overflow: TextOverflow.ellipsis),
+                      Text(t.title,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
+                      Text('${t.scheduleType.name} • ${t.coinsBase} coins',
+                          overflow: TextOverflow.ellipsis),
                     ],
                   ),
                 ),
