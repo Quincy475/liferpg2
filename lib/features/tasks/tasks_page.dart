@@ -6,6 +6,7 @@ import 'package:household_rpg/data/models/models.dart';
 import 'package:household_rpg/data/repositories/task_mvp_repo.dart';
 
 enum TaskViewMode { board, week }
+
 enum TaskFilterMode { all, mine, unclaimed }
 
 class TasksPage extends ConsumerStatefulWidget {
@@ -100,7 +101,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                 ),
               ),
               Container(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                color: Theme.of(context).colorScheme.surfaceVariant,
                 child: templatesAsync.when(
                   loading: () => const SizedBox.shrink(),
                   error: (_, __) => const SizedBox.shrink(),
@@ -137,12 +138,14 @@ class _TasksPageState extends ConsumerState<TasksPage> {
               ),
               const Spacer(),
               TextButton(
-                onPressed: () => setState(() => _weekAnchor = _weekAnchor.subtract(const Duration(days: 7))),
+                onPressed: () =>
+                    setState(() => _weekAnchor = _weekAnchor.subtract(const Duration(days: 7))),
                 child: const Text('◀'),
               ),
               Text(DateFormat('dd MMM').format(_weekStart)),
               TextButton(
-                onPressed: () => setState(() => _weekAnchor = _weekAnchor.add(const Duration(days: 7))),
+                onPressed: () =>
+                    setState(() => _weekAnchor = _weekAnchor.add(const Duration(days: 7))),
                 child: const Text('▶'),
               ),
             ],
@@ -187,7 +190,9 @@ class _TasksPageState extends ConsumerState<TasksPage> {
 
   Future<void> _claim(String guildId, String meId, String instanceId) async {
     try {
-      await ref.read(taskMvpRepoProvider).claimInstance(guildId: guildId, instanceId: instanceId, userId: meId);
+      await ref
+          .read(taskMvpRepoProvider)
+          .claimInstance(guildId: guildId, instanceId: instanceId, userId: meId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task geclaimd.')));
     } catch (e) {
@@ -198,9 +203,12 @@ class _TasksPageState extends ConsumerState<TasksPage> {
 
   Future<void> _complete(String guildId, String meId, String instanceId) async {
     try {
-      await ref.read(taskMvpRepoProvider).completeInstance(guildId: guildId, instanceId: instanceId, userId: meId);
+      await ref
+          .read(taskMvpRepoProvider)
+          .completeInstance(guildId: guildId, instanceId: instanceId, userId: meId);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task voltooid + coins.')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Task voltooid + coins.')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Complete mislukt: $e')));
@@ -225,9 +233,14 @@ class _TasksPageState extends ConsumerState<TasksPage> {
           content: SingleChildScrollView(
             child: Column(
               children: [
-                TextField(controller: titleC, decoration: const InputDecoration(labelText: 'Title')),
-                TextField(controller: descC, decoration: const InputDecoration(labelText: 'Description')),
-                TextField(controller: coinC, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Coins')),
+                TextField(
+                    controller: titleC, decoration: const InputDecoration(labelText: 'Title')),
+                TextField(
+                    controller: descC, decoration: const InputDecoration(labelText: 'Description')),
+                TextField(
+                    controller: coinC,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Coins')),
                 DropdownButtonFormField<TaskScheduleType>(
                   value: schedule,
                   decoration: const InputDecoration(labelText: 'Schedule'),
@@ -236,7 +249,10 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                       .toList(),
                   onChanged: (v) => setS(() => schedule = v ?? TaskScheduleType.daily),
                 ),
-                TextField(controller: intervalC, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Interval value')),
+                TextField(
+                    controller: intervalC,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Interval value')),
               ],
             ),
           ),
@@ -271,13 +287,15 @@ class _TasksPageState extends ConsumerState<TasksPage> {
   }
 }
 
-final _templatesProvider = StreamProvider.autoDispose.family<List<TaskTemplate>, String>((ref, gid) {
+final _templatesProvider =
+    StreamProvider.autoDispose.family<List<TaskTemplate>, String>((ref, gid) {
   return ref.read(taskMvpRepoProvider).watchTemplates(gid);
 });
 
 typedef _WeekArg = ({String guildId, DateTime start, DateTime end});
 
-final _weekInstancesProvider = StreamProvider.autoDispose.family<List<TaskInstance>, _WeekArg>((ref, arg) {
+final _weekInstancesProvider =
+    StreamProvider.autoDispose.family<List<TaskInstance>, _WeekArg>((ref, arg) {
   return ref.read(taskMvpRepoProvider).watchWeekInstances(
         guildId: arg.guildId,
         weekStart: arg.start,
@@ -291,14 +309,21 @@ class _BoardList extends StatelessWidget {
   final Future<void> Function(String id) onClaim;
   final Future<void> Function(String id) onComplete;
 
-  const _BoardList({required this.instances, required this.meId, required this.onClaim, required this.onComplete});
+  const _BoardList(
+      {required this.instances,
+      required this.meId,
+      required this.onClaim,
+      required this.onComplete});
 
   @override
   Widget build(BuildContext context) {
     if (instances.isEmpty) return const Center(child: Text('Geen tasks voor deze week.'));
     return ListView(
       padding: const EdgeInsets.all(12),
-      children: [for (final i in instances) _TaskCard(i: i, meId: meId, onClaim: onClaim, onComplete: onComplete)],
+      children: [
+        for (final i in instances)
+          _TaskCard(i: i, meId: meId, onClaim: onClaim, onComplete: onComplete)
+      ],
     );
   }
 }
@@ -308,7 +333,11 @@ class _WeekList extends StatelessWidget {
   final String meId;
   final Future<void> Function(String id) onClaim;
   final Future<void> Function(String id) onComplete;
-  const _WeekList({required this.instances, required this.meId, required this.onClaim, required this.onComplete});
+  const _WeekList(
+      {required this.instances,
+      required this.meId,
+      required this.onClaim,
+      required this.onComplete});
 
   @override
   Widget build(BuildContext context) {
@@ -327,7 +356,8 @@ class _WeekList extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 8, top: 6),
             child: Text(e.key, style: Theme.of(context).textTheme.titleMedium),
           ),
-          ...e.value.map((i) => _TaskCard(i: i, meId: meId, onClaim: onClaim, onComplete: onComplete)),
+          ...e.value
+              .map((i) => _TaskCard(i: i, meId: meId, onClaim: onClaim, onComplete: onComplete)),
           const Divider(),
         ]
       ],
@@ -340,12 +370,14 @@ class _TaskCard extends StatelessWidget {
   final String meId;
   final Future<void> Function(String id) onClaim;
   final Future<void> Function(String id) onComplete;
-  const _TaskCard({required this.i, required this.meId, required this.onClaim, required this.onComplete});
+  const _TaskCard(
+      {required this.i, required this.meId, required this.onClaim, required this.onComplete});
 
   @override
   Widget build(BuildContext context) {
     final canClaim = i.status == TaskInstanceStatus.open || i.status == TaskInstanceStatus.claimed;
-    final canComplete = i.status != TaskInstanceStatus.completed && i.status != TaskInstanceStatus.missed;
+    final canComplete =
+        i.status != TaskInstanceStatus.completed && i.status != TaskInstanceStatus.missed;
 
     return Card(
       child: Padding(
@@ -440,8 +472,11 @@ class _TemplateScroller extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(t.title, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-                      Text('${t.scheduleType.name} • ${t.coinsBase} coins', overflow: TextOverflow.ellipsis),
+                      Text(t.title,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
+                      Text('${t.scheduleType.name} • ${t.coinsBase} coins',
+                          overflow: TextOverflow.ellipsis),
                     ],
                   ),
                 ),
