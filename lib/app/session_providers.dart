@@ -29,6 +29,7 @@ import 'package:household_rpg/scoring/scoring_enginge.dart';
 import 'package:household_rpg/data/repositories/task_repo.dart';
 import 'package:household_rpg/data/repositories/shop_repo.dart';
 import 'package:household_rpg/data/repositories/event_repo.dart';
+import 'package:household_rpg/data/repositories/auth_repo.dart';
 import 'package:household_rpg/data/repositories/raid_repo.dart';
 
 // Hive (voor thema)
@@ -39,6 +40,7 @@ import 'package:household_rpg/data/local/hive_boxes.dart';
 /// ---------------------------------------------------------------------------
 final firebaseAuthProvider = Provider<FirebaseAuth>((_) => FirebaseAuth.instance);
 final firestoreProvider = Provider<FirebaseFirestore>((_) => FirebaseFirestore.instance);
+final authRepoProvider = Provider<AuthRepository>((ref) => AuthRepository(ref.read(firebaseAuthProvider)));
 
 /// ---------------------------------------------------------------------------
 /// UserRepository (Firestore) + auth state

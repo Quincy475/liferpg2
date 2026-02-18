@@ -6,14 +6,32 @@ class AuthRepository {
 
   Stream<User?> authStateChanges() => _auth.authStateChanges();
 
-  Future<User> ensureSignedInAnonymously() async {
-    final cur = _auth.currentUser;
-    if (cur != null) return cur;
-    final cred = await _auth.signInAnonymously();
-    return cred.user!;
+  Future<UserCredential> signInAnonymously() => _auth.signInAnonymously();
+
+  Future<UserCredential> signInWithEmailAndPassword({
+    required String email,
+    required String password,
+  }) {
+    return _auth.signInWithEmailAndPassword(email: email, password: password);
   }
 
-  // Later kun je hiermee upgraden (linken) naar Google/Apple
+  Future<UserCredential> createUserWithEmailAndPassword({
+    required String email,
+    required String password,
+  }) {
+    return _auth.createUserWithEmailAndPassword(email: email, password: password);
+  }
+
+  Future<UserCredential> linkAnonymousWithEmailPassword({
+    required String email,
+    required String password,
+  }) async {
+    final u = _auth.currentUser;
+    if (u == null) throw StateError('No current user');
+    final credential = EmailAuthProvider.credential(email: email, password: password);
+    return u.linkWithCredential(credential);
+  }
+
   Future<void> linkWithCredential(AuthCredential credential) async {
     final u = _auth.currentUser;
     if (u == null) throw StateError('No current user');
