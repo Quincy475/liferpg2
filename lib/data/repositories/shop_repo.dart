@@ -129,6 +129,7 @@ class ShopRepository {
           ...it.toMap(),
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
+          'active': true,
         });
       }
     }
@@ -138,18 +139,53 @@ class ShopRepository {
   // (optioneel) handig om elders te gebruiken:
   Future<List<ShopItem>> getGuildShopItems(String guildId) async {
     final q = await _guildShopCol(guildId).orderBy('price').get();
-    return q.docs.map((d) {
+    final out = <ShopItem>[];
+    for (final d in q.docs) {
       final data = <String, dynamic>{...(d.data())};
+      if ((data['active'] ?? true) != true) continue;
       data['id'] = data['id'] ?? d.id;
-      return ShopItem.fromMap(data);
-    }).toList();
+      out.add(ShopItem.fromMap(data));
+    }
+    return out;
   }
 
   Stream<List<ShopItem>> watchGuildShopItems(String guildId) {
-    return _guildShopCol(guildId).orderBy('price').snapshots().map((snap) => snap.docs.map((d) {
-          final data = <String, dynamic>{...(d.data())};
-          data['id'] = data['id'] ?? d.id;
-          return ShopItem.fromMap(data);
-        }).toList());
+    return _guildShopCol(guildId).orderBy('price').snapshots().map((snap) {
+      final out = <ShopItem>[];
+      for (final d in snap.docs) {
+        final data = <String, dynamic>{...(d.data())};
+        if ((data['active'] ?? true) != true) continue;
+        data['id'] = data['id'] ?? d.id;
+        out.add(ShopItem.fromMap(data));
+      }
+      return out;
+    });
+  }
+
+  Future<void> createGuildShopItem({required String guildId, required ShopItem item}) async {
+    final doc =
+        item.id.isEmpty ? _guildShopCol(guildId).doc() : _guildShopCol(guildId).doc(item.id);
+    await doc.set({
+      ...item.toMap(),
+      'id': doc.id,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'active': true,
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> upsertGuildShopItem({required String guildId, required ShopItem item}) async {
+    await _guildShopCol(guildId).doc(item.id).set({
+      ...item.toMap(),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'active': true,
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> archiveGuildShopItem({required String guildId, required String itemId}) async {
+    await _guildShopCol(guildId).doc(itemId).set({
+      'active': false,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 }

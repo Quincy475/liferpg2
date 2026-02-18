@@ -31,11 +31,11 @@ class NeonButton extends StatelessWidget {
       duration: const Duration(milliseconds: 180),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
-        color: filled ? AppPalette.gold : Colors.transparent,
-        border: Border.all(color: AppPalette.gold, width: filled ? 0 : 1.2),
+        color: filled ? AppPalette.amber : Colors.transparent,
+        border: Border.all(color: AppPalette.amber, width: filled ? 0 : 1.2),
         boxShadow: filled
             ? const [
-                BoxShadow(color: AppPalette.gold, blurRadius: 10, spreadRadius: 0.5),
+                BoxShadow(color: AppPalette.amber, blurRadius: 10, spreadRadius: 0.5),
               ]
             : null,
       ),
