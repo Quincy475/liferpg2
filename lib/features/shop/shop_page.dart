@@ -28,7 +28,7 @@ class ShopPage extends ConsumerWidget {
       ),
       body: AtmosphereBackground(
         child: SafeArea(
-          child: meAsync.when(
+            child: meAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => Center(child: Text('Error: $e')),
           data: (me) {
@@ -42,20 +42,20 @@ class ShopPage extends ConsumerWidget {
                 EnterMotion(
                   delayMs: 20,
                   child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      Chip(label: Text('🪙 ${me.coins}')),
-                      const SizedBox(width: 10),
-                      const Expanded(
-                        child: Text(
-                          'Coins uit tasks kun je hier direct uitgeven.',
-                          overflow: TextOverflow.ellipsis,
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        Chip(label: Text('🪙 ${me.coins}')),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            'Coins uit tasks kun je hier direct uitgeven.',
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
                 ),
                 Expanded(
                   child: itemsAsync.when(
@@ -63,7 +63,8 @@ class ShopPage extends ConsumerWidget {
                     error: (e, _) => Center(child: Text('Error: $e')),
                     data: (items) {
                       if (items.isEmpty) {
-                        return const Center(child: Text('Nog geen shopitems. Voeg er één toe met +'));
+                        return const Center(
+                            child: Text('Nog geen shopitems. Voeg er één toe met +'));
                       }
 
                       return ListView.builder(
@@ -71,68 +72,82 @@ class ShopPage extends ConsumerWidget {
                         itemBuilder: (c, i) {
                           final item = items[i];
                           return EnterMotion(
-                            delayMs: 40 + (i * 26),
-                            child: Card(
-                            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(18),
-                              side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
+                              delayMs: 40 + (i * 26),
+                              child: Card(
+                                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(18),
+                                  side: BorderSide(
+                                      color: Theme.of(context).colorScheme.outlineVariant),
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text(item.icon, style: const TextStyle(fontSize: 24)),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              item.name,
-                                              style: const TextStyle(fontWeight: FontWeight.w700),
+                                      Row(
+                                        children: [
+                                          Text(item.icon, style: const TextStyle(fontSize: 24)),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  item.name,
+                                                  style:
+                                                      const TextStyle(fontWeight: FontWeight.w700),
+                                                ),
+                                                Text(
+                                                  item.description,
+                                                  maxLines: 2,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ],
                                             ),
-                                            Text(
-                                              item.description,
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ],
-                                        ),
+                                          ),
+                                          Text('${item.price} 🪙'),
+                                        ],
                                       ),
-                                      Text('${item.price} 🪙'),
+                                      const SizedBox(height: 10),
+                                      Wrap(
+                                        children: [
+                                          FilledButton.icon(
+                                            onPressed: () =>
+                                                _buyWithConfirm(context, ref, me, item),
+                                            icon: const Icon(Icons.shopping_bag_outlined),
+                                            label: const Text('Buy'),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          PopupMenuButton<String>(
+                                            tooltip: 'More',
+                                            onSelected: (value) async {
+                                              if (value == 'edit') {
+                                                await _openItemDialog(context, ref, me.guildId!,
+                                                    existing: item);
+                                                return;
+                                              }
+                                              await ref.read(shopRepoProvider).archiveGuildShopItem(
+                                                    guildId: me.guildId!,
+                                                    itemId: item.id,
+                                                  );
+                                            },
+                                            itemBuilder: (_) => const [
+                                              PopupMenuItem(value: 'edit', child: Text('Edit')),
+                                              PopupMenuItem(value: 'delete', child: Text('Delete')),
+                                            ],
+                                            child: const Padding(
+                                              padding:
+                                                  EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                              child: Icon(Icons.more_horiz),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ],
                                   ),
-                                  const SizedBox(height: 10),
-                                  Wrap(
-                                    children: [
-                                      FilledButton.icon(
-                                        onPressed: () => _buyWithConfirm(context, ref, me, item),
-                                        icon: const Icon(Icons.shopping_bag_outlined),
-                                        label: const Text('Buy'),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      OutlinedButton(
-                                        onPressed: () => _openItemDialog(context, ref, me.guildId!, existing: item),
-                                        child: const Text('Edit'),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      TextButton(
-                                        onPressed: () => ref.read(shopRepoProvider).archiveGuildShopItem(
-                                              guildId: me.guildId!,
-                                              itemId: item.id,
-                                            ),
-                                        child: const Text('Delete'),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ));
+                                ),
+                              ));
                         },
                       );
                     },
@@ -146,7 +161,8 @@ class ShopPage extends ConsumerWidget {
     );
   }
 
-  Future<void> _buyWithConfirm(BuildContext context, WidgetRef ref, UserProfile me, ShopItem item) async {
+  Future<void> _buyWithConfirm(
+      BuildContext context, WidgetRef ref, UserProfile me, ShopItem item) async {
     final yes = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
@@ -170,7 +186,9 @@ class ShopPage extends ConsumerWidget {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aankoop mislukt.')));
       return;
     }
-    await ref.read(fsUserRepoProvider).addToInventory(userId: me.id, itemId: item.id, itemName: item.name);
+    await ref
+        .read(fsUserRepoProvider)
+        .addToInventory(userId: me.id, itemId: item.id, itemName: item.name);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${item.name} gekocht.')));
   }
@@ -190,8 +208,10 @@ class ShopPage extends ConsumerWidget {
           child: Column(
             children: [
               TextField(controller: titleC, decoration: const InputDecoration(labelText: 'Title')),
-              TextField(controller: descC, decoration: const InputDecoration(labelText: 'Description')),
-              TextField(controller: iconC, decoration: const InputDecoration(labelText: 'Icon (emoji)')),
+              TextField(
+                  controller: descC, decoration: const InputDecoration(labelText: 'Description')),
+              TextField(
+                  controller: iconC, decoration: const InputDecoration(labelText: 'Icon (emoji)')),
               TextField(
                 controller: priceC,
                 keyboardType: TextInputType.number,

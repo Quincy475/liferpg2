@@ -130,16 +130,22 @@ class TaskMvpRepository {
 
     final batch = _db.batch();
     for (final d in q.docs) {
-      batch.set(d.reference, {
-        'status': 'missed',
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      batch.set(
+          d.reference,
+          {
+            'status': 'missed',
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true));
 
       final data = d.data();
       if ((data['bonusReason'] ?? '').toString().isNotEmpty) continue;
-      batch.set(d.reference, {
-        'bonusReason': 'missed',
-      }, SetOptions(merge: true));
+      batch.set(
+          d.reference,
+          {
+            'bonusReason': 'missed',
+          },
+          SetOptions(merge: true));
     }
     if (q.docs.isNotEmpty) await batch.commit();
   }
@@ -159,18 +165,60 @@ class TaskMvpRepository {
         throw StateError('Task can no longer be claimed');
       }
 
-      tx.set(ref, {
-        'status': 'claimed',
-        'claimedByUserId': userId,
-        'claimedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      tx.set(
+          ref,
+          {
+            'status': 'claimed',
+            'claimedByUserId': userId,
+            'claimedAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true));
     });
 
     await _logEvent(
       guildId: guildId,
       actorUserId: userId,
       type: 'claimed',
+      instanceId: instanceId,
+      payload: {},
+    );
+  }
+
+  Future<void> unclaimInstance({
+    required String guildId,
+    required String instanceId,
+    required String userId,
+  }) async {
+    final ref = _instances(guildId).doc(instanceId);
+    await _db.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      if (!snap.exists) throw StateError('Task instance not found');
+      final m = snap.data()!;
+      final status = (m['status'] ?? 'open').toString();
+      final claimedBy = (m['claimedByUserId'] ?? '').toString();
+      if (status == 'completed' || status == 'missed' || status == 'expired') {
+        throw StateError('Task can no longer be unclaimed');
+      }
+      if (claimedBy != userId) {
+        throw StateError('Only the claimer can unclaim this task');
+      }
+
+      tx.set(
+          ref,
+          {
+            'status': 'open',
+            'claimedByUserId': null,
+            'claimedAt': null,
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true));
+    });
+
+    await _logEvent(
+      guildId: guildId,
+      actorUserId: userId,
+      type: 'unclaimed',
       instanceId: instanceId,
       payload: {},
     );
@@ -197,20 +245,26 @@ class TaskMvpRepository {
       final bonus = (m['bonusReason'] == 'carry_over_double') ? base : 0;
       final total = base + bonus;
 
-      tx.set(ref, {
-        'status': 'completed',
-        'completedByUserId': userId,
-        'completedAt': FieldValue.serverTimestamp(),
-        'claimedByUserId': userId,
-        'updatedAt': FieldValue.serverTimestamp(),
-        'coinsAwarded': total,
-      }, SetOptions(merge: true));
+      tx.set(
+          ref,
+          {
+            'status': 'completed',
+            'completedByUserId': userId,
+            'completedAt': FieldValue.serverTimestamp(),
+            'claimedByUserId': userId,
+            'updatedAt': FieldValue.serverTimestamp(),
+            'coinsAwarded': total,
+          },
+          SetOptions(merge: true));
 
-      tx.set(userRef, {
-        'coins': FieldValue.increment(total),
-        'weeklyPoints': FieldValue.increment(total),
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      tx.set(
+          userRef,
+          {
+            'coins': FieldValue.increment(total),
+            'weeklyPoints': FieldValue.increment(total),
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true));
     });
 
     await _logEvent(

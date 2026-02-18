@@ -17,7 +17,7 @@ class ProfilePage extends ConsumerWidget {
       appBar: AppBar(title: const Text('Profile')),
       body: AtmosphereBackground(
         child: SafeArea(
-          child: meAsync.when(
+            child: meAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => Center(child: Text('Error: $e')),
           data: (me) {
@@ -142,7 +142,8 @@ class _GuildCard extends ConsumerWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Create guild'),
-        content: TextField(controller: c, decoration: const InputDecoration(labelText: 'Guild name')),
+        content:
+            TextField(controller: c, decoration: const InputDecoration(labelText: 'Guild name')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Create')),
@@ -150,7 +151,8 @@ class _GuildCard extends ConsumerWidget {
       ),
     );
     if (ok != true || c.text.trim().isEmpty) return;
-    final gid = await ref.read(fsUserRepoProvider).createGuildAndJoin(ownerUid: me.id, name: c.text.trim());
+    final gid =
+        await ref.read(fsUserRepoProvider).createGuildAndJoin(ownerUid: me.id, name: c.text.trim());
     await ref.read(shopRepoProvider).seedGuildShop(guildId: gid);
   }
 
@@ -161,7 +163,8 @@ class _GuildCard extends ConsumerWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Join guild'),
-        content: TextField(controller: c, decoration: const InputDecoration(labelText: 'Invite code')),
+        content:
+            TextField(controller: c, decoration: const InputDecoration(labelText: 'Invite code')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Join')),
@@ -169,10 +172,11 @@ class _GuildCard extends ConsumerWidget {
       ),
     );
     if (ok != true || c.text.trim().isEmpty) return;
-    await ref.read(fsUserRepoProvider).joinByInviteCode(uid: me.id, inviteCode: c.text.trim().toUpperCase());
+    await ref
+        .read(fsUserRepoProvider)
+        .joinByInviteCode(uid: me.id, inviteCode: c.text.trim().toUpperCase());
   }
 }
-
 
 class _ThemeCard extends ConsumerWidget {
   const _ThemeCard();
@@ -203,7 +207,7 @@ class _ThemeCard extends ConsumerWidget {
             Wrap(
               spacing: 8,
               children: [
-                for (final c in [Colors.teal, Colors.purple, Colors.indigo, Colors.orange])
+                for (final c in [Colors.teal, Colors.orange, Colors.cyan, Colors.green])
                   GestureDetector(
                     onTap: () => ctrl.setSeed(c),
                     child: CircleAvatar(
@@ -289,6 +293,7 @@ class _ActivityCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final eventsAsync = ref.watch(_eventsProvider(guildId));
+    final usersAsync = ref.watch(usersInMyGuildProvider);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -296,12 +301,16 @@ class _ActivityCard extends ConsumerWidget {
           loading: () => const CircularProgressIndicator(),
           error: (e, _) => Text('Error: $e'),
           data: (events) {
-            final filtered = events.where((e) => ['completed', 'claimed', 'missed'].contains(e.type)).toList();
+            final users = usersAsync.valueOrNull ?? const <UserProfile>[];
+            final nameById = <String, String>{for (final u in users) u.id: u.name};
+            final filtered =
+                events.where((e) => ['completed', 'claimed', 'missed'].contains(e.type)).toList();
             if (filtered.isEmpty) return const Text('Nog geen task activity.');
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Recent completed tasks / activity', style: Theme.of(context).textTheme.titleMedium),
+                Text('Recent completed tasks / activity',
+                    style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
                 SizedBox(
                   height: 220,
@@ -313,7 +322,9 @@ class _ActivityCard extends ConsumerWidget {
                         dense: true,
                         leading: Text(_eventEmoji(e.type)),
                         title: Text(e.type),
-                        subtitle: Text('by ${e.actorUserId} • ${DateFormat('dd MMM HH:mm').format(e.at)}'),
+                        subtitle: Text(
+                          'by ${nameById[e.actorUserId] ?? e.actorUserId} • ${DateFormat('dd MMM HH:mm').format(e.at)}',
+                        ),
                       );
                     },
                   ),

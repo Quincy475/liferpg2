@@ -79,6 +79,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                           instances: filtered,
                           meId: me.id,
                           onClaim: (id) => _claim(me.guildId!, me.id, id),
+                          onUnclaim: (id) => _unclaim(me.guildId!, me.id, id),
                           onComplete: (id) => _complete(me.guildId!, me.id, id),
                           onOpen: (instance) => _openTaskDetails(context, me.guildId!, instance),
                         );
@@ -88,6 +89,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                         instances: board,
                         meId: me.id,
                         onClaim: (id) => _claim(me.guildId!, me.id, id),
+                        onUnclaim: (id) => _unclaim(me.guildId!, me.id, id),
                         onComplete: (id) => _complete(me.guildId!, me.id, id),
                         onOpen: (instance) => _openTaskDetails(context, me.guildId!, instance),
                       );
@@ -272,6 +274,21 @@ class _TasksPageState extends ConsumerState<TasksPage> {
     }
   }
 
+  Future<void> _unclaim(String guildId, String meId, String instanceId) async {
+    try {
+      await ref.read(taskMvpRepoProvider).unclaimInstance(
+            guildId: guildId,
+            instanceId: instanceId,
+            userId: meId,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task unclaimed.')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Unclaim mislukt: $e')));
+    }
+  }
+
   Future<void> _complete(String guildId, String meId, String instanceId) async {
     try {
       await ref.read(taskMvpRepoProvider).completeInstance(guildId: guildId, instanceId: instanceId, userId: meId);
@@ -299,20 +316,17 @@ class _TasksPageState extends ConsumerState<TasksPage> {
       return;
     }
 
-    await showModalBottomSheet<void>(
+    await showDialog<void>(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(template!.title),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(template!.title, style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 10),
                 Text('Description', style: Theme.of(context).textTheme.labelLarge),
                 const SizedBox(height: 6),
                 Text(
@@ -320,30 +334,27 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                       ? 'Deze task heeft nog geen description.'
                       : template.description,
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 Text('Schedule: ${template.scheduleType.name} • interval ${template.intervalValue}'),
+                const SizedBox(height: 4),
                 Text('Coins: ${template.coinsBase}'),
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(sheetContext);
-                        _openTemplateEditDialog(context, existing: template, allowDelete: true);
-                      },
-                      icon: const Icon(Icons.edit),
-                      label: const Text('Edit'),
-                    ),
-                    FilledButton(
-                      onPressed: () => Navigator.pop(sheetContext),
-                      child: const Text('Close'),
-                    ),
-                  ],
-                ),
               ],
             ),
           ),
+          actions: [
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                _openTemplateEditDialog(context, existing: template, allowDelete: true);
+              },
+              icon: const Icon(Icons.edit),
+              label: const Text('Edit'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Close'),
+            ),
+          ],
         );
       },
     );
@@ -372,12 +383,15 @@ class _TasksPageState extends ConsumerState<TasksPage> {
             child: Column(
               children: [
                 TextField(controller: titleC, decoration: const InputDecoration(labelText: 'Title')),
+                const SizedBox(height: 10),
                 TextField(controller: descC, decoration: const InputDecoration(labelText: 'Description')),
+                const SizedBox(height: 10),
                 TextField(
                   controller: coinC,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(labelText: 'Coins'),
                 ),
+                const SizedBox(height: 10),
                 DropdownButtonFormField<TaskScheduleType>(
                   value: schedule,
                   decoration: const InputDecoration(labelText: 'Schedule'),
@@ -386,6 +400,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                       .toList(),
                   onChanged: (v) => setS(() => schedule = v ?? TaskScheduleType.daily),
                 ),
+                const SizedBox(height: 10),
                 TextField(
                   controller: intervalC,
                   keyboardType: TextInputType.number,
@@ -462,6 +477,7 @@ class _BoardList extends StatelessWidget {
   final List<TaskInstance> instances;
   final String meId;
   final Future<void> Function(String id) onClaim;
+  final Future<void> Function(String id) onUnclaim;
   final Future<void> Function(String id) onComplete;
   final Future<void> Function(TaskInstance instance) onOpen;
 
@@ -469,6 +485,7 @@ class _BoardList extends StatelessWidget {
     required this.instances,
     required this.meId,
     required this.onClaim,
+    required this.onUnclaim,
     required this.onComplete,
     required this.onOpen,
   });
@@ -485,8 +502,9 @@ class _BoardList extends StatelessWidget {
             child: _TaskCard(
               i: instances[idx],
               meId: meId,
-              onClaim: onClaim,
-              onComplete: onComplete,
+            onClaim: onClaim,
+            onUnclaim: onUnclaim,
+            onComplete: onComplete,
               onOpen: () => onOpen(instances[idx]),
             ),
           )
@@ -499,6 +517,7 @@ class _WeekList extends StatelessWidget {
   final List<TaskInstance> instances;
   final String meId;
   final Future<void> Function(String id) onClaim;
+  final Future<void> Function(String id) onUnclaim;
   final Future<void> Function(String id) onComplete;
   final Future<void> Function(TaskInstance instance) onOpen;
 
@@ -506,6 +525,7 @@ class _WeekList extends StatelessWidget {
     required this.instances,
     required this.meId,
     required this.onClaim,
+    required this.onUnclaim,
     required this.onComplete,
     required this.onOpen,
   });
@@ -534,8 +554,9 @@ class _WeekList extends StatelessWidget {
               child: _TaskCard(
                 i: i,
                 meId: meId,
-                onClaim: onClaim,
-                onComplete: onComplete,
+              onClaim: onClaim,
+              onUnclaim: onUnclaim,
+              onComplete: onComplete,
                 onOpen: () => onOpen(i),
               ),
             );
@@ -551,6 +572,7 @@ class _TaskCard extends StatelessWidget {
   final TaskInstance i;
   final String meId;
   final Future<void> Function(String id) onClaim;
+  final Future<void> Function(String id) onUnclaim;
   final Future<void> Function(String id) onComplete;
   final VoidCallback onOpen;
 
@@ -558,6 +580,7 @@ class _TaskCard extends StatelessWidget {
     required this.i,
     required this.meId,
     required this.onClaim,
+    required this.onUnclaim,
     required this.onComplete,
     required this.onOpen,
   });
@@ -568,7 +591,11 @@ class _TaskCard extends StatelessWidget {
     final canComplete = i.status != TaskInstanceStatus.completed && i.status != TaskInstanceStatus.missed;
     final hasDescription = i.description.trim().isNotEmpty;
 
-    return Card(
+    final isClaimedByMe = i.claimedByUserId == meId;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Card(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
         side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
@@ -584,7 +611,7 @@ class _TaskCard extends StatelessWidget {
                 if (hasDescription)
                   const Tooltip(message: 'Heeft description', child: Icon(Icons.notes_rounded, size: 18))
                 else
-                  const Tooltip(message: 'Lege description', child: Icon(Icons.notes_outlined, size: 18)),
+                  const Tooltip(message: 'Lege description', child: Icon(Icons.notes, size: 18)),
                 const SizedBox(width: 8),
                 _StatusPill(status: i.status),
               ],
@@ -600,8 +627,16 @@ class _TaskCard extends StatelessWidget {
               children: [
                 OutlinedButton(onPressed: onOpen, child: const Text('Open')),
                 OutlinedButton(
-                  onPressed: canClaim ? () => onClaim(i.id) : null,
-                  child: const Text('Claim'),
+                  onPressed: canClaim
+                      ? () {
+                          if (isClaimedByMe) {
+                            onUnclaim(i.id);
+                          } else {
+                            onClaim(i.id);
+                          }
+                        }
+                      : null,
+                  child: Text(isClaimedByMe ? 'Unclaim' : 'Claim'),
                 ),
                 FilledButton(
                   onPressed: canComplete ? () => onComplete(i.id) : null,
@@ -611,7 +646,7 @@ class _TaskCard extends StatelessWidget {
             ),
           ],
         ),
-      ),
+      )),
     );
   }
 }

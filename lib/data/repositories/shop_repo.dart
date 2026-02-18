@@ -162,9 +162,9 @@ class ShopRepository {
     });
   }
 
-
   Future<void> createGuildShopItem({required String guildId, required ShopItem item}) async {
-    final doc = item.id.isEmpty ? _guildShopCol(guildId).doc() : _guildShopCol(guildId).doc(item.id);
+    final doc =
+        item.id.isEmpty ? _guildShopCol(guildId).doc() : _guildShopCol(guildId).doc(item.id);
     await doc.set({
       ...item.toMap(),
       'id': doc.id,
@@ -188,5 +188,4 @@ class ShopRepository {
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
-
 }
