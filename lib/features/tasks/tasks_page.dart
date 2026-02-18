@@ -97,7 +97,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                 EnterMotion(
                   delayMs: 80,
                   child: Container(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  color: Theme.of(context).colorScheme.surface,
                   child: templatesAsync.when(
                     loading: () => const SizedBox.shrink(),
                     error: (_, __) => const SizedBox.shrink(),
@@ -166,7 +166,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(999),
-                  color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                  color: Theme.of(context).colorScheme.surface,
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -584,7 +584,7 @@ class _TaskCard extends StatelessWidget {
                 if (hasDescription)
                   const Tooltip(message: 'Heeft description', child: Icon(Icons.notes_rounded, size: 18))
                 else
-                  const Tooltip(message: 'Lege description', child: Icon(Icons.notes_off_outlined, size: 18)),
+                  const Tooltip(message: 'Lege description', child: Icon(Icons.notes_outlined, size: 18)),
                 const SizedBox(width: 8),
                 _StatusPill(status: i.status),
               ],

@@ -48,7 +48,7 @@ class GlowProgressBar extends StatelessWidget {
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: const [
                           BoxShadow(
-                            color: AppPalette.neon,
+                            color: Color(0xFF5DE3D3),
                             blurRadius: 12,
                             spreadRadius: 0,
                           ),

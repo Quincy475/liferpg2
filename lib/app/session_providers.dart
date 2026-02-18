@@ -155,17 +155,17 @@ final guildShopItemsProvider =
 
 
 // Pet state stream (kan null zijn als user nog geen pet koos)
-final petStateProvider = StreamProvider<PetState?>((ref) {
-  final uid = ref.watch(currentUserIdProvider);
-  if (uid == null) return const Stream.empty();
-  return ref.read(petRepoProvider).watchState(uid);
-});
+// final petStateProvider = StreamProvider<PetState?>((ref) {
+//   final uid = ref.watch(currentUserIdProvider);
+//   if (uid == null) return const Stream.empty();
+//   return ref.read(petRepoProvider).watchState(uid);
+// });
 
-final roomLayoutProvider = StreamProvider<RoomLayout?>((ref) {
-  final uid = ref.watch(currentUserIdProvider);
-  if (uid == null) return const Stream.empty();
-  return ref.read(petRepoProvider).watchRoom(uid);
-});
+// final roomLayoutProvider = StreamProvider<RoomLayout?>((ref) {
+//   final uid = ref.watch(currentUserIdProvider);
+//   if (uid == null) return const Stream.empty();
+//   return ref.read(petRepoProvider).watchRoom(uid);
+// });
 
 /// ---------------------------------------------------------------------------
 /// Thema (zoals je had), met hive-persist
