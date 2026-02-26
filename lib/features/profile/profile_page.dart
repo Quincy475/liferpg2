@@ -14,7 +14,7 @@ class ProfilePage extends ConsumerWidget {
     final meAsync = ref.watch(currentUserProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Profile')),
+      appBar: AppBar(title: const Text('Profiel')),
       body: AtmosphereBackground(
         child: SafeArea(
             child: meAsync.when(
@@ -27,8 +27,6 @@ class ProfilePage extends ConsumerWidget {
               padding: const EdgeInsets.all(16),
               children: [
                 EnterMotion(delayMs: 20, child: _NameCard(me: me)),
-                const SizedBox(height: 12),
-                EnterMotion(delayMs: 60, child: _GuildCard(me: me)),
                 const SizedBox(height: 12),
                 EnterMotion(delayMs: 100, child: _StatsCard(me: me)),
                 const SizedBox(height: 12),
@@ -59,6 +57,12 @@ class _NameCard extends ConsumerStatefulWidget {
 class _NameCardState extends ConsumerState<_NameCard> {
   late final TextEditingController _c = TextEditingController(text: widget.me.name);
   bool _busy = false;
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -206,8 +210,20 @@ class _ThemeCard extends ConsumerWidget {
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,
+              runSpacing: 8,
               children: [
-                for (final c in [Colors.teal, Colors.orange, Colors.cyan, Colors.green])
+                for (final c in [
+                  Colors.teal,
+                  Colors.orange,
+                  Colors.cyan,
+                  Colors.green,
+                  Colors.indigo,
+                  Colors.red,
+                  Colors.pink,
+                  Colors.lime,
+                  Colors.blueGrey,
+                  Colors.amber,
+                ])
                   GestureDetector(
                     onTap: () => ctrl.setSeed(c),
                     child: CircleAvatar(

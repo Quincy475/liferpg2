@@ -402,6 +402,36 @@ class UserRepository {
   Future<void> joinGuild(String uid, String guildId) => setGuild(uid, guildId);
   Future<void> leaveGuild(String uid) => setGuild(uid, null);
 
+  Future<void> leaveGuildSafely(String uid) async {
+    await _db.runTransaction((tx) async {
+      final uRef = userRef(uid);
+      final userSnap = await tx.get(uRef);
+      final userData = userSnap.data() ?? <String, dynamic>{};
+      final guildId = userData['guildId'] as String?;
+      if (guildId == null) {
+        throw StateError('Je zit niet in een guild.');
+      }
+
+      final memberSnap = await tx.get(memberRef(guildId, uid));
+      final role = memberSnap.data()?['role'] as String? ?? 'member';
+      if (role == 'owner') {
+        final owners = await membersCol(guildId).where('role', isEqualTo: 'owner').get();
+        if (owners.docs.length <= 1) {
+          throw StateError('Je bent de enige owner. Draag eerst ownership over.');
+        }
+      }
+
+      tx.set(
+          uRef,
+          {
+            'guildId': null,
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true));
+      tx.delete(memberRef(guildId, uid));
+    });
+  }
+
   Future<String> createGuildAndJoin({
     required String ownerUid,
     required String name,

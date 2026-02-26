@@ -22,26 +22,37 @@ class AppPalette {
 }
 
 ThemeData buildRpgTheme(Color seed) {
+  final seedHsl = HSLColor.fromColor(seed);
+  final darkBg = seedHsl
+      .withSaturation((seedHsl.saturation * 0.34).clamp(0.14, 0.40))
+      .withLightness(0.10)
+      .toColor();
+  final darkSurface = seedHsl
+      .withHue((seedHsl.hue + 16) % 360)
+      .withSaturation((seedHsl.saturation * 0.40).clamp(0.18, 0.52))
+      .withLightness(0.15)
+      .toColor();
+
   final base = ThemeData(
     useMaterial3: true,
     colorScheme: ColorScheme.fromSeed(
       seedColor: seed,
       brightness: Brightness.dark,
-      background: AppPalette.bgDark,
-      surface: AppPalette.bgDark2,
-      primary: AppPalette.amber,
-      secondary: AppPalette.teal,
+      background: darkBg,
+      surface: darkSurface,
+      primary: seed,
+      secondary: seedHsl.withHue((seedHsl.hue + 34) % 360).toColor(),
     ),
     fontFamily: 'Poppins',
-    scaffoldBackgroundColor: AppPalette.bgDark,
+    scaffoldBackgroundColor: darkBg,
   );
 
   return base.copyWith(
-    appBarTheme: const AppBarTheme(
+    appBarTheme: AppBarTheme(
       backgroundColor: Colors.transparent,
       elevation: 0,
       centerTitle: false,
-      titleTextStyle: TextStyle(
+      titleTextStyle: const TextStyle(
         fontFamily: 'Georgia',
         fontWeight: FontWeight.w700,
         color: AppPalette.creamText,
@@ -49,15 +60,22 @@ ThemeData buildRpgTheme(Color seed) {
       ),
     ),
     cardTheme: CardTheme(
-      color: AppPalette.bgDark2,
+      color: base.colorScheme.surface.withOpacity(0.88),
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       margin: EdgeInsets.zero,
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: const Color(0xFF2A3046),
+      fillColor: base.colorScheme.surface.withOpacity(0.75),
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+    ),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: base.colorScheme.surface.withOpacity(0.92),
+      indicatorColor: base.colorScheme.primary.withOpacity(0.24),
+      labelTextStyle: MaterialStatePropertyAll(
+        TextStyle(color: base.colorScheme.onSurface),
+      ),
     ),
     textTheme: base.textTheme.apply(
       bodyColor: AppPalette.creamText,
@@ -67,15 +85,29 @@ ThemeData buildRpgTheme(Color seed) {
 }
 
 ThemeData buildRpgLightTheme(Color seed) {
+  final seedHsl = HSLColor.fromColor(seed);
+  final lightBg = seedHsl
+      .withSaturation((seedHsl.saturation * 0.26).clamp(0.08, 0.34))
+      .withLightness(0.96)
+      .toColor();
+  final lightSurface = seedHsl
+      .withHue((seedHsl.hue + 26) % 360)
+      .withSaturation((seedHsl.saturation * 0.30).clamp(0.10, 0.38))
+      .withLightness(0.93)
+      .toColor();
+
   final base = ThemeData(
     useMaterial3: true,
     colorScheme: ColorScheme.fromSeed(
       seedColor: seed,
       brightness: Brightness.light,
-      primary: const Color(0xFF6A4C93),
-      secondary: const Color(0xFF10A89D),
+      primary: seed,
+      secondary: seedHsl.withHue((seedHsl.hue + 42) % 360).toColor(),
+      background: lightBg,
+      surface: lightSurface,
     ),
     fontFamily: 'Poppins',
+    scaffoldBackgroundColor: lightBg,
   );
 
   return base.copyWith(
@@ -91,7 +123,7 @@ ThemeData buildRpgLightTheme(Color seed) {
       ),
     ),
     cardTheme: CardTheme(
-      color: base.colorScheme.surface,
+      color: base.colorScheme.surface.withOpacity(0.94),
       elevation: 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       margin: EdgeInsets.zero,
@@ -100,6 +132,13 @@ ThemeData buildRpgLightTheme(Color seed) {
       filled: true,
       fillColor: base.colorScheme.surface.withOpacity(0.7),
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+    ),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: base.colorScheme.surface.withOpacity(0.94),
+      indicatorColor: base.colorScheme.primary.withOpacity(0.20),
+      labelTextStyle: MaterialStatePropertyAll(
+        TextStyle(color: base.colorScheme.onSurface),
+      ),
     ),
   );
 }
@@ -111,6 +150,8 @@ class AtmosphereBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
+    final seed = Theme.of(context).colorScheme.primary;
+    final tones = _backgroundTones(seed: seed, dark: dark);
     return Stack(
       children: [
         Container(
@@ -118,25 +159,60 @@ class AtmosphereBackground extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: dark
-                  ? const [Color(0xFF0F2526), Color(0xFF174446), Color(0xFF102A2B)]
-                  : const [Color(0xFFFFF4E3), Color(0xFFE7F8F6), Color(0xFFEAF4FF)],
+              colors: tones,
             ),
           ),
         ),
         Positioned(
           top: -80,
           right: -30,
-          child: _blob(const Color(0x22FFFFFF), 240),
+          child: _blob(dark ? const Color(0x22FFFFFF) : tones[1].withOpacity(0.22), 240),
         ),
         Positioned(
           bottom: -70,
           left: -40,
-          child: _blob(const Color(0x1A22B8A7), 220),
+          child: _blob(dark ? tones[2].withOpacity(0.20) : tones[0].withOpacity(0.18), 220),
         ),
         child,
       ],
     );
+  }
+
+  List<Color> _backgroundTones({required Color seed, required bool dark}) {
+    final hsl = HSLColor.fromColor(seed);
+    if (dark) {
+      final c1 = hsl
+          .withSaturation((hsl.saturation * 0.55).clamp(0.28, 0.60))
+          .withLightness(0.14)
+          .toColor();
+      final c2 = hsl
+          .withHue((hsl.hue + 28) % 360)
+          .withSaturation((hsl.saturation * 0.70).clamp(0.32, 0.72))
+          .withLightness(0.20)
+          .toColor();
+      final c3 = hsl
+          .withHue((hsl.hue + 300) % 360)
+          .withSaturation((hsl.saturation * 0.45).clamp(0.22, 0.52))
+          .withLightness(0.12)
+          .toColor();
+      return [c1, c2, c3];
+    }
+
+    final c1 = hsl
+        .withSaturation((hsl.saturation * 0.28).clamp(0.10, 0.32))
+        .withLightness(0.95)
+        .toColor();
+    final c2 = hsl
+        .withHue((hsl.hue + 36) % 360)
+        .withSaturation((hsl.saturation * 0.30).clamp(0.12, 0.38))
+        .withLightness(0.91)
+        .toColor();
+    final c3 = hsl
+        .withHue((hsl.hue + 322) % 360)
+        .withSaturation((hsl.saturation * 0.24).clamp(0.10, 0.30))
+        .withLightness(0.93)
+        .toColor();
+    return [c1, c2, c3];
   }
 
   Widget _blob(Color color, double size) => Container(
