@@ -18,6 +18,7 @@ import 'package:household_rpg/data/repositories/pet_repo.dart';
 import 'package:household_rpg/data/repositories/quest_repo.dart'; // jouw QuestRepository
 import 'package:household_rpg/data/repositories/skill_node_repository.dart';
 import 'package:household_rpg/data/repositories/skill_tree_repository.dart';
+import 'package:household_rpg/data/repositories/auth_repo.dart';
 import 'package:household_rpg/data/repositories/user_repo.dart';
 import 'package:household_rpg/features/pet/data/furniture_repo.dart';
 import 'package:household_rpg/features/quest/state/quest_controller.dart';
@@ -39,6 +40,9 @@ import 'package:household_rpg/data/local/hive_boxes.dart';
 /// ---------------------------------------------------------------------------
 final firebaseAuthProvider = Provider<FirebaseAuth>((_) => FirebaseAuth.instance);
 final firestoreProvider = Provider<FirebaseFirestore>((_) => FirebaseFirestore.instance);
+final authRepoProvider = Provider<AuthRepository>(
+  (ref) => AuthRepository(ref.read(firebaseAuthProvider)),
+);
 
 /// ---------------------------------------------------------------------------
 /// UserRepository (Firestore) + auth state
@@ -72,14 +76,14 @@ final authStateProvider = StreamProvider<User?>(
   (ref) => ref.read(firebaseAuthProvider).authStateChanges(),
 );
 
-/// Bootstrap: zorg dat er ALTIJD iemand ingelogd is (anoniem) en dat het users/{uid} doc bestaat.
+/// Bootstrap auth gekoppeld profiel: alleen bij ingelogde user user-doc syncen.
 final sessionBootstrapProvider = FutureProvider<void>((ref) async {
-  final auth = ref.read(firebaseAuthProvider);
-  if (auth.currentUser == null) {
-    await auth.signInAnonymously();
-  }
-  final uid = auth.currentUser!.uid;
-  await ref.read(fsUserRepoProvider).ensureUserDoc(uid);
+  final authUser = await ref.watch(authStateProvider.future);
+  if (authUser == null) return;
+  final fallbackName = (authUser.displayName?.trim().isNotEmpty ?? false)
+      ? authUser.displayName!.trim()
+      : (authUser.email?.split('@').first ?? 'Player');
+  await ref.read(fsUserRepoProvider).ensureUserDoc(authUser.uid, defaultName: fallbackName);
 });
 
 final petRepoProvider = Provider<PetRepository>((ref) {
@@ -88,15 +92,21 @@ final petRepoProvider = Provider<PetRepository>((ref) {
 
 /// Huidig uid
 final currentUserIdProvider = Provider<String?>((ref) {
-  final u = ref.watch(authStateProvider).value;
-  return u?.uid;
+  final authUser = ref.watch(authStateProvider).value;
+  return authUser?.uid;
+});
+
+final isAnonymousSessionProvider = Provider<bool>((ref) {
+  return ref.watch(currentUserIdProvider) == null;
 });
 
 /// Live UserProfile uit Firestore (één stream app-breed gedeeld)
 final currentUserProvider = StreamProvider<UserProfile?>((ref) {
   final uid = ref.watch(currentUserIdProvider);
   if (uid == null) return const Stream.empty();
-  return ref.read(fsUserRepoProvider).watchUser(uid);
+  return Stream.fromFuture(ref.read(fsUserRepoProvider).ensureUserDoc(uid)).asyncExpand(
+    (_) => ref.read(fsUserRepoProvider).watchUser(uid),
+  );
 });
 
 final fsSkillTreeRepoProvider = Provider<SkillTreeRepository>(
@@ -104,7 +114,7 @@ final fsSkillTreeRepoProvider = Provider<SkillTreeRepository>(
 );
 
 final questControllerProvider = StateNotifierProvider<QuestController, QuestState>((ref) {
-  // start bootstrappen (anoniem inloggen + ensureUserDoc)
+  // start bootstrappen (ingelogde user + ensureUserDoc)
   final boot = ref.watch(sessionBootstrapProvider);
 
   final repo = ref.watch(questRepoProvider);
