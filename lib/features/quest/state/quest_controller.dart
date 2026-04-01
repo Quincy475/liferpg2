@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:household_rpg/data/models/Quest.dart';
 import 'package:household_rpg/data/models/models.dart';
 import 'package:household_rpg/data/repositories/quest_repo.dart';
@@ -38,7 +39,6 @@ class QuestController extends StateNotifier<QuestState> {
     refresh();
   }
 
-  // ✅ helper
   bool get hasUser => _user != null;
 
   Future<void> refresh() async {

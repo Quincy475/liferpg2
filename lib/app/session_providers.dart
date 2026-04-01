@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // Firebase
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 // Jouw domein
 import 'package:household_rpg/data/models/Quest.dart'; // jouw Quest-model
@@ -123,7 +124,7 @@ final questControllerProvider = StateNotifierProvider<QuestController, QuestStat
 
   // 1) luister naar user-wijzigingen (guild switch, profiel update)
   ref.listen<UserProfile?>(
-    currentUserProvider.select((a) => a.valueOrNull),
+    currentUserProvider.select((a) => a.value),
     (prev, next) => controller.setUser(next),
     fireImmediately: true,
   );

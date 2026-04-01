@@ -317,7 +317,7 @@ class _ActivityCard extends ConsumerWidget {
           loading: () => const CircularProgressIndicator(),
           error: (e, _) => Text('Error: $e'),
           data: (events) {
-            final users = usersAsync.valueOrNull ?? const <UserProfile>[];
+            final users = usersAsync.value ?? const <UserProfile>[];
             final nameById = <String, String>{for (final u in users) u.id: u.name};
             final filtered =
                 events.where((e) => ['completed', 'claimed', 'missed'].contains(e.type)).toList();

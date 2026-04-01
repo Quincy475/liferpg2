@@ -59,12 +59,7 @@ ThemeData buildRpgTheme(Color seed) {
         fontSize: 22,
       ),
     ),
-    cardTheme: CardTheme(
-      color: base.colorScheme.surface.withOpacity(0.88),
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      margin: EdgeInsets.zero,
-    ),
+    
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: base.colorScheme.surface.withOpacity(0.75),
@@ -122,12 +117,7 @@ ThemeData buildRpgLightTheme(Color seed) {
         fontSize: 22,
       ),
     ),
-    cardTheme: CardTheme(
-      color: base.colorScheme.surface.withOpacity(0.94),
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      margin: EdgeInsets.zero,
-    ),
+   
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: base.colorScheme.surface.withOpacity(0.7),
