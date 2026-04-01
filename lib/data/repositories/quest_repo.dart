@@ -14,17 +14,10 @@ class QuestCooldownException implements Exception {
 }
 
 abstract class QuestRepository {
-  Future<List<Quest>> getDailyQuests(UserProfile user);
-  Future<List<Quest>> getCoopQuests(UserProfile user);
-
+  Stream<List<Quest>> watchDailyQuests(UserProfile user);
+  Stream<List<Quest>> watchCoopQuests(UserProfile user);
   Future<void> completeDaily({required String questId, required UserProfile user});
-
-  Future<void> contributeCoop({
-    required String questId,
-    required UserProfile user,
-    required double delta,
-  });
-
+  Future<void> contributeCoop({required String questId, required UserProfile user, required double delta});
   Future<void> claimCoop({required String questId, required UserProfile user});
 }
 
@@ -119,6 +112,47 @@ class _QuestRepository implements QuestRepository {
 
     return q.docs.map((d) => Quest.fromMap({...d.data(), 'id': d.id})).toList();
   }
+  @override
+Stream<List<Quest>> watchDailyQuests(UserProfile user) {
+  _ensureGuild(user);
+  return _guildQuestsCol(user.guildId!)
+      .where('type', isEqualTo: 'daily')
+      .orderBy('createdAt', descending: false)
+      .snapshots()
+      .asyncMap((snap) async {
+        final futures = snap.docs.map((doc) async {
+          final base = <String, dynamic>{...doc.data(), 'id': doc.id};
+          final completion = await _getCompletionForUser(
+            questRef: doc.reference,
+            uid: user.id,
+          );
+          if (completion != null) {
+            final cooldownUntil = _toDateTime(completion['cooldownUntil']);
+            final now = DateTime.now();
+            final onCooldown = cooldownUntil != null && now.isBefore(cooldownUntil);
+            base['cooldownUntil'] = cooldownUntil;
+            base['completed'] = onCooldown;
+          } else {
+            base['cooldownUntil'] = null;
+            base['completed'] = false;
+          }
+          return Quest.fromMap(base);
+        }).toList();
+        return Future.wait(futures);
+      });
+}
+
+@override
+Stream<List<Quest>> watchCoopQuests(UserProfile user) {
+  _ensureGuild(user);
+  return _guildQuestsCol(user.guildId!)
+      .where('type', isEqualTo: 'coop')
+      .orderBy('createdAt', descending: false)
+      .snapshots()
+      .map((snap) => snap.docs
+          .map((d) => Quest.fromMap({...d.data(), 'id': d.id}))
+          .toList());
+}
 
   @override
   Future<void> completeDaily({

@@ -29,6 +29,19 @@ class _TasksPageState extends ConsumerState<TasksPage> {
 
   DateTime get _weekEnd => _weekStart.add(const Duration(days: 6, hours: 23, minutes: 59));
 
+  /// Helper om alle relevante task data te verversen
+  Future<void> _manualRefresh(String guildId) async {
+    // 1. Zorg dat de database up-to-date is (backend logica)
+    await _refreshWeek(guildId: guildId);
+    
+    // 2. Forceer Riverpod om de streams opnieuw te starten
+    ref.invalidate(_templatesProvider(guildId));
+    ref.invalidate(_weekInstancesProvider);
+    
+    // 3. Reset bootstrap key zodat de volgende build niet onnodig refresht
+    _lastBootstrapKey = '${guildId}_${_weekStart.toIso8601String()}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final meAsync = ref.watch(currentUserProvider);
@@ -47,80 +60,81 @@ class _TasksPageState extends ConsumerState<TasksPage> {
       body: AtmosphereBackground(
         child: SafeArea(
           child: meAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('Error: $e')),
-          data: (me) {
-            if (me == null || me.guildId == null) {
-              return const Center(child: Text('Join of maak eerst een guild op Profile.'));
-            }
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => Center(child: Text('Error: $e')),
+            data: (me) {
+              if (me == null || me.guildId == null) {
+                return const Center(child: Text('Join of maak eerst een guild op Profile.'));
+              }
 
-            _bootstrapWeek(guildId: me.guildId!);
+              _bootstrapWeek(guildId: me.guildId!);
 
-            final instancesAsync = ref.watch(_weekInstancesProvider((
-              guildId: me.guildId!,
-              start: _weekStart,
-              end: _weekEnd,
-            )));
-            final templatesAsync = ref.watch(_templatesProvider(me.guildId!));
+              final instancesAsync = ref.watch(_weekInstancesProvider((
+                guildId: me.guildId!,
+                start: _weekStart,
+                end: _weekEnd,
+              )));
+              final templatesAsync = ref.watch(_templatesProvider(me.guildId!));
 
-            return Column(
-              children: [
-                EnterMotion(delayMs: 20, child: _headerControls()),
-                Expanded(
-                  child: instancesAsync.when(
-                    loading: () => const Center(child: CircularProgressIndicator()),
-                    error: (e, _) => Center(child: Text('Error: $e')),
-                    data: (instances) {
-                      final filtered = _applyFilter(instances, me.id);
-                      final board = _boardViewInstances(filtered);
+              return Column(
+                children: [
+                  EnterMotion(delayMs: 20, child: _headerControls()),
+                  Expanded(
+                    child: instancesAsync.when(
+                      loading: () => const Center(child: CircularProgressIndicator()),
+                      error: (e, _) => Center(child: Text('Error: $e')),
+                      data: (instances) {
+                        final filtered = _applyFilter(instances, me.id);
+                        final board = _boardViewInstances(filtered);
 
-                      if (_viewMode == TaskViewMode.week) {
-                        return _WeekList(
-                          instances: filtered,
+                        if (_viewMode == TaskViewMode.week) {
+                          return _WeekList(
+                            instances: filtered,
+                            meId: me.id,
+                            onClaim: (id) => _claim(me.guildId!, me.id, id),
+                            onUnclaim: (id) => _unclaim(me.guildId!, me.id, id),
+                            onComplete: (id) => _complete(me.guildId!, me.id, id),
+                            onOpen: (instance) => _openTaskDetails(context, me.guildId!, instance),
+                          );
+                        }
+
+                        return _BoardList(
+                          instances: board,
                           meId: me.id,
                           onClaim: (id) => _claim(me.guildId!, me.id, id),
                           onUnclaim: (id) => _unclaim(me.guildId!, me.id, id),
                           onComplete: (id) => _complete(me.guildId!, me.id, id),
                           onOpen: (instance) => _openTaskDetails(context, me.guildId!, instance),
                         );
-                      }
-
-                      return _BoardList(
-                        instances: board,
-                        meId: me.id,
-                        onClaim: (id) => _claim(me.guildId!, me.id, id),
-                        onUnclaim: (id) => _unclaim(me.guildId!, me.id, id),
-                        onComplete: (id) => _complete(me.guildId!, me.id, id),
-                        onOpen: (instance) => _openTaskDetails(context, me.guildId!, instance),
-                      );
-                    },
-                  ),
-                ),
-                EnterMotion(
-                  delayMs: 80,
-                  child: Container(
-                  color: Theme.of(context).colorScheme.surface,
-                  child: templatesAsync.when(
-                    loading: () => const SizedBox.shrink(),
-                    error: (_, __) => const SizedBox.shrink(),
-                    data: (templates) => _TemplateScroller(
-                      templates: templates,
-                      onEdit: (t) => _openTemplateEditDialog(context, existing: t),
-                      onArchive: (id) async {
-                        await ref.read(taskMvpRepoProvider).archiveTemplate(
-                              guildId: me.guildId!,
-                              templateId: id,
-                            );
-                        await _refreshWeek(guildId: me.guildId!);
                       },
                     ),
                   ),
-                ),
-                ),
-              ],
-            );
-          },
-        )),
+                  EnterMotion(
+                    delayMs: 80,
+                    child: Container(
+                      color: Theme.of(context).colorScheme.surface,
+                      child: templatesAsync.when(
+                        loading: () => const SizedBox.shrink(),
+                        error: (_, __) => const SizedBox.shrink(),
+                        data: (templates) => _TemplateScroller(
+                          templates: templates,
+                          onEdit: (t) => _openTemplateEditDialog(context, existing: t),
+                          onArchive: (id) async {
+                            await ref.read(taskMvpRepoProvider).archiveTemplate(
+                                  guildId: me.guildId!,
+                                  templateId: id,
+                                );
+                            await _manualRefresh(me.guildId!);
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
       ),
     );
   }
@@ -177,9 +191,9 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                       visualDensity: VisualDensity.compact,
                       constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
                       iconSize: 18,
-                      onPressed: () => setState(
-                        () => _weekAnchor = _weekAnchor.subtract(const Duration(days: 7)),
-                      ),
+                      onPressed: () {
+                        setState(() => _weekAnchor = _weekAnchor.subtract(const Duration(days: 7)));
+                      },
                       icon: const Icon(Icons.chevron_left),
                     ),
                     ConstrainedBox(
@@ -195,9 +209,9 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                       visualDensity: VisualDensity.compact,
                       constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
                       iconSize: 18,
-                      onPressed: () => setState(
-                        () => _weekAnchor = _weekAnchor.add(const Duration(days: 7)),
-                      ),
+                      onPressed: () {
+                        setState(() => _weekAnchor = _weekAnchor.add(const Duration(days: 7)));
+                      },
                       icon: const Icon(Icons.chevron_right),
                     ),
                   ],
@@ -426,10 +440,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
 
     if (action == 'delete' && existing != null) {
       await ref.read(taskMvpRepoProvider).archiveTemplate(guildId: me.guildId!, templateId: existing.id);
-      await _refreshWeek(guildId: me.guildId!);
-      _lastBootstrapKey = null;
-      if (!mounted) return;
-      setState(() {});
+      await _manualRefresh(me.guildId!);
       return;
     }
 
@@ -452,10 +463,8 @@ class _TasksPageState extends ConsumerState<TasksPage> {
       await ref.read(taskMvpRepoProvider).updateTemplate(guildId: me.guildId!, input: input);
     }
 
-    await _refreshWeek(guildId: me.guildId!);
-    _lastBootstrapKey = null;
-    if (!mounted) return;
-    setState(() {});
+    // Refresh alles na aanpassing
+    await _manualRefresh(me.guildId!);
   }
 }
 
@@ -502,9 +511,9 @@ class _BoardList extends StatelessWidget {
             child: _TaskCard(
               i: instances[idx],
               meId: meId,
-            onClaim: onClaim,
-            onUnclaim: onUnclaim,
-            onComplete: onComplete,
+              onClaim: onClaim,
+              onUnclaim: onUnclaim,
+              onComplete: onComplete,
               onOpen: () => onOpen(instances[idx]),
             ),
           )
@@ -554,9 +563,9 @@ class _WeekList extends StatelessWidget {
               child: _TaskCard(
                 i: i,
                 meId: meId,
-              onClaim: onClaim,
-              onUnclaim: onUnclaim,
-              onComplete: onComplete,
+                onClaim: onClaim,
+                onUnclaim: onUnclaim,
+                onComplete: onComplete,
                 onOpen: () => onOpen(i),
               ),
             );
@@ -596,57 +605,58 @@ class _TaskCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       child: Card(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(child: Text(i.title, style: const TextStyle(fontWeight: FontWeight.w700))),
-                if (hasDescription)
-                  const Tooltip(message: 'Heeft description', child: Icon(Icons.notes_rounded, size: 18))
-                else
-                  const Tooltip(message: 'Lege description', child: Icon(Icons.notes, size: 18)),
-                const SizedBox(width: 8),
-                _StatusPill(status: i.status),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text('🪙 ${i.coinsAwarded} • due ${DateFormat('EEE HH:mm').format(i.dueAt)}'),
-            if (i.claimedByUserId != null)
-              Text('Claimed by: ${i.claimedByUserId == meId ? 'Me' : i.claimedByUserId}'),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                OutlinedButton(onPressed: onOpen, child: const Text('Open')),
-                OutlinedButton(
-                  onPressed: canClaim
-                      ? () {
-                          if (isClaimedByMe) {
-                            onUnclaim(i.id);
-                          } else {
-                            onClaim(i.id);
-                          }
-                        }
-                      : null,
-                  child: Text(isClaimedByMe ? 'Unclaim' : 'Claim'),
-                ),
-                FilledButton(
-                  onPressed: canComplete ? () => onComplete(i.id) : null,
-                  child: const Text('Complete'),
-                ),
-              ],
-            ),
-          ],
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
         ),
-      )),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: Text(i.title, style: const TextStyle(fontWeight: FontWeight.w700))),
+                  if (hasDescription)
+                    const Tooltip(message: 'Heeft description', child: Icon(Icons.notes_rounded, size: 18))
+                  else
+                    const Tooltip(message: 'Lege description', child: Icon(Icons.notes, size: 18)),
+                  const SizedBox(width: 8),
+                  _StatusPill(status: i.status),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text('🪙 ${i.coinsAwarded} • due ${DateFormat('EEE HH:mm').format(i.dueAt)}'),
+              if (i.claimedByUserId != null)
+                Text('Claimed by: ${i.claimedByUserId == meId ? 'Me' : i.claimedByUserId}'),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton(onPressed: onOpen, child: const Text('Open')),
+                  OutlinedButton(
+                    onPressed: canClaim
+                        ? () {
+                            if (isClaimedByMe) {
+                              onUnclaim(i.id);
+                            } else {
+                              onClaim(i.id);
+                            }
+                          }
+                        : null,
+                    child: Text(isClaimedByMe ? 'Unclaim' : 'Claim'),
+                  ),
+                  FilledButton(
+                    onPressed: canComplete ? () => onComplete(i.id) : null,
+                    child: const Text('Complete'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
