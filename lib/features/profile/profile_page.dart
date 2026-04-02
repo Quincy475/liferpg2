@@ -306,6 +306,13 @@ class _ActivityCard extends ConsumerWidget {
   final String guildId;
   const _ActivityCard({required this.guildId});
 
+  static const _showTypes = {
+    'completed', 'claimed', 'unclaimed',
+    'claimed_all_future', 'unclaimed_all_future',
+    'created_template', 'updated_template', 'deleted_template',
+    'missed',
+  };
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final eventsAsync = ref.watch(_eventsProvider(guildId));
@@ -319,28 +326,24 @@ class _ActivityCard extends ConsumerWidget {
           data: (events) {
             final users = usersAsync.value ?? const <UserProfile>[];
             final nameById = <String, String>{for (final u in users) u.id: u.name};
-            final filtered =
-                events.where((e) => ['completed', 'claimed', 'missed'].contains(e.type)).toList();
-            if (filtered.isEmpty) return const Text('Nog geen task activity.');
+            final filtered = events.where((e) => _showTypes.contains(e.type)).toList();
+            if (filtered.isEmpty) return const Text('Nog geen guild activity.');
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Recent completed tasks / activity',
-                    style: Theme.of(context).textTheme.titleMedium),
+                Text('Guild activity', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
                 SizedBox(
-                  height: 220,
+                  height: 260,
                   child: ListView.builder(
                     itemCount: filtered.length,
                     itemBuilder: (_, i) {
                       final e = filtered[i];
                       return ListTile(
                         dense: true,
-                        leading: Text(_eventEmoji(e.type)),
-                        title: Text(e.type),
-                        subtitle: Text(
-                          'by ${nameById[e.actorUserId] ?? e.actorUserId} • ${DateFormat('dd MMM HH:mm').format(e.at)}',
-                        ),
+                        leading: Text(_eventEmoji(e.type), style: const TextStyle(fontSize: 18)),
+                        title: Text(_eventLine(e, nameById)),
+                        subtitle: Text(DateFormat('dd MMM HH:mm').format(e.at)),
                       );
                     },
                   ),
@@ -353,18 +356,46 @@ class _ActivityCard extends ConsumerWidget {
     );
   }
 
-  String _eventEmoji(String t) {
-    switch (t) {
+  String _eventLine(TaskEvent e, Map<String, String> nameById) {
+    final actor = nameById[e.actorUserId] ?? e.actorUserId;
+    final title = (e.payload['title'] as String?) ?? '?';
+    final coins = e.payload['coins'];
+    switch (e.type) {
       case 'completed':
-        return '✅';
+        return '$actor voltooide "$title" en kreeg $coins 🪙';
       case 'claimed':
-        return '📌';
+        return '$actor claimde "$title"';
+      case 'unclaimed':
+        return '$actor unclaimde "$title"';
+      case 'claimed_all_future':
+        return '$actor claimde alle toekomstige "$title" taken';
+      case 'unclaimed_all_future':
+        return '$actor unclaimde alle toekomstige "$title" taken';
+      case 'created_template':
+        return '$actor maakte template "$title" aan';
+      case 'updated_template':
+        return '$actor paste template "$title" aan';
+      case 'deleted_template':
+        return '$actor verwijderde template "$title"';
       case 'missed':
-        return '⚠️';
+        return '"$title" is gemist';
       default:
-        return '📝';
+        return '$actor: ${e.type}';
     }
   }
+
+  String _eventEmoji(String t) => switch (t) {
+    'completed'            => '✅',
+    'claimed'              => '📌',
+    'unclaimed'            => '📤',
+    'claimed_all_future'   => '📌',
+    'unclaimed_all_future' => '📤',
+    'created_template'     => '➕',
+    'updated_template'     => '✏️',
+    'deleted_template'     => '🗑️',
+    'missed'               => '⚠️',
+    _                      => '📝',
+  };
 }
 
 final _eventsProvider = StreamProvider.autoDispose.family<List<TaskEvent>, String>((ref, gid) {

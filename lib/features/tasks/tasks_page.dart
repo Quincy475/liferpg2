@@ -84,15 +84,20 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                       loading: () => const Center(child: CircularProgressIndicator()),
                       error: (e, _) => Center(child: Text('Error: $e')),
                       data: (instances) {
-                        final filtered = _applyFilter(instances, me.id);
+                        final loadedTemplates = templatesAsync.value;
+                        final live = loadedTemplates == null
+                            ? instances
+                            : instances.where((i) => loadedTemplates.any((t) => t.id == i.templateId)).toList();
+                        final filtered = _applyFilter(live, me.id);
                         final board = _boardViewInstances(filtered);
 
                         if (_viewMode == TaskViewMode.week) {
-                          return _WeekList(
+                          return _PlannerView(
                             instances: filtered,
+                            templates: templatesAsync.value ?? [],
                             meId: me.id,
-                            onClaim: (id) => _claim(me.guildId!, me.id, id),
-                            onUnclaim: (id) => _unclaim(me.guildId!, me.id, id),
+                            onClaim: (id, tid) => _claim(me.guildId!, me.id, id, tid),
+                            onUnclaim: (id, tid) => _unclaim(me.guildId!, me.id, id, tid),
                             onComplete: (id) => _complete(me.guildId!, me.id, id),
                             onOpen: (instance) => _openTaskDetails(context, me.guildId!, instance),
                           );
@@ -101,8 +106,8 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                         return _BoardList(
                           instances: board,
                           meId: me.id,
-                          onClaim: (id) => _claim(me.guildId!, me.id, id),
-                          onUnclaim: (id) => _unclaim(me.guildId!, me.id, id),
+                          onClaim: (id, tid) => _claim(me.guildId!, me.id, id, tid),
+                          onUnclaim: (id, tid) => _unclaim(me.guildId!, me.id, id, tid),
                           onComplete: (id) => _complete(me.guildId!, me.id, id),
                           onOpen: (instance) => _openTaskDetails(context, me.guildId!, instance),
                         );
@@ -123,6 +128,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                             await ref.read(taskMvpRepoProvider).archiveTemplate(
                                   guildId: me.guildId!,
                                   templateId: id,
+                                  actorUserId: me.id,
                                 );
                             await _manualRefresh(me.guildId!);
                           },
@@ -277,26 +283,96 @@ class _TasksPageState extends ConsumerState<TasksPage> {
     return out;
   }
 
-  Future<void> _claim(String guildId, String meId, String instanceId) async {
+  Future<void> _claim(String guildId, String meId, String instanceId, String templateId) async {
+    final templates = ref.read(_templatesProvider(guildId)).value ?? [];
+    final tmpl = templates.where((t) => t.id == templateId).firstOrNull;
+
+    bool claimAll = false;
+    if (tmpl?.isRepeatable == true) {
+      final choice = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const Text('Claimen'),
+          content: const Text('Wil je alleen deze taak claimen of alle toekomstige?'),
+          actions: [
+            OutlinedButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Alleen deze'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('Alle toekomstige'),
+            ),
+          ],
+        ),
+      );
+      if (choice == null) return;
+      claimAll = choice;
+    }
+
     try {
-      await ref.read(taskMvpRepoProvider).claimInstance(guildId: guildId, instanceId: instanceId, userId: meId);
+      if (claimAll) {
+        await ref.read(taskMvpRepoProvider).claimAllFutureInstances(
+          guildId: guildId, templateId: templateId, userId: meId,
+        );
+      } else {
+        await ref.read(taskMvpRepoProvider).claimInstance(
+          guildId: guildId, instanceId: instanceId, userId: meId,
+        );
+      }
+      ref.invalidate(_weekInstancesProvider);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task geclaimd.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(claimAll ? 'Alle toekomstige taken geclaimd.' : 'Task geclaimd.'),
+      ));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Claim mislukt: $e')));
     }
   }
 
-  Future<void> _unclaim(String guildId, String meId, String instanceId) async {
+  Future<void> _unclaim(String guildId, String meId, String instanceId, String templateId) async {
+    final templates = ref.read(_templatesProvider(guildId)).value ?? [];
+    final tmpl = templates.where((t) => t.id == templateId).firstOrNull;
+
+    bool unclaimAll = false;
+    if (tmpl?.isRepeatable == true) {
+      final choice = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const Text('Unclaimen'),
+          content: const Text('Wil je alleen deze taak unclaimen of alle toekomstige?'),
+          actions: [
+            OutlinedButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Alleen deze'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('Alle toekomstige'),
+            ),
+          ],
+        ),
+      );
+      if (choice == null) return;
+      unclaimAll = choice;
+    }
+
     try {
-      await ref.read(taskMvpRepoProvider).unclaimInstance(
-            guildId: guildId,
-            instanceId: instanceId,
-            userId: meId,
-          );
+      if (unclaimAll) {
+        await ref.read(taskMvpRepoProvider).unclaimAllFutureInstances(
+          guildId: guildId, templateId: templateId, userId: meId,
+        );
+      } else {
+        await ref.read(taskMvpRepoProvider).unclaimInstance(
+          guildId: guildId, instanceId: instanceId, userId: meId,
+        );
+      }
+      ref.invalidate(_weekInstancesProvider);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task unclaimed.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(unclaimAll ? 'Alle toekomstige taken unclaimed.' : 'Task unclaimed.'),
+      ));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Unclaim mislukt: $e')));
@@ -306,6 +382,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
   Future<void> _complete(String guildId, String meId, String instanceId) async {
     try {
       await ref.read(taskMvpRepoProvider).completeInstance(guildId: guildId, instanceId: instanceId, userId: meId);
+      ref.invalidate(_weekInstancesProvider);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task voltooid + coins.')));
     } catch (e) {
@@ -439,7 +516,12 @@ class _TasksPageState extends ConsumerState<TasksPage> {
     if (action == null || action == 'cancel') return;
 
     if (action == 'delete' && existing != null) {
-      await ref.read(taskMvpRepoProvider).archiveTemplate(guildId: me.guildId!, templateId: existing.id);
+      await ref.read(taskMvpRepoProvider).archiveTemplate(
+        guildId: me.guildId!, templateId: existing.id, actorUserId: me.id,
+      );
+      await ref.read(taskMvpRepoProvider).removeOpenInstancesForTemplate(
+        guildId: me.guildId!, templateId: existing.id,
+      );
       await _manualRefresh(me.guildId!);
       return;
     }
@@ -452,15 +534,21 @@ class _TasksPageState extends ConsumerState<TasksPage> {
       isRepeatable: true,
       scheduleType: schedule,
       intervalValue: int.tryParse(intervalC.text.trim()) ?? 1,
-      defaultAssigneeUserId: me.id,
+      defaultAssigneeUserId: null,
       takeoverAfterMinutes: 60,
       carryOverPolicy: 'double_next_success',
     );
 
     if (existing == null) {
-      await ref.read(taskMvpRepoProvider).createTemplate(guildId: me.guildId!, input: input);
+      await ref.read(taskMvpRepoProvider).createTemplate(guildId: me.guildId!, input: input, actorUserId: me.id);
     } else {
-      await ref.read(taskMvpRepoProvider).updateTemplate(guildId: me.guildId!, input: input);
+      await ref.read(taskMvpRepoProvider).updateTemplate(guildId: me.guildId!, input: input, actorUserId: me.id);
+      await ref.read(taskMvpRepoProvider).syncTemplateToOpenInstances(
+        guildId: me.guildId!,
+        templateId: input.id,
+        newTitle: input.title,
+        newCoins: input.coinsBase,
+      );
     }
 
     // Refresh alles na aanpassing
@@ -485,8 +573,8 @@ final _weekInstancesProvider = StreamProvider.autoDispose.family<List<TaskInstan
 class _BoardList extends StatelessWidget {
   final List<TaskInstance> instances;
   final String meId;
-  final Future<void> Function(String id) onClaim;
-  final Future<void> Function(String id) onUnclaim;
+  final Future<void> Function(String id, String templateId) onClaim;
+  final Future<void> Function(String id, String templateId) onUnclaim;
   final Future<void> Function(String id) onComplete;
   final Future<void> Function(TaskInstance instance) onOpen;
 
@@ -522,16 +610,18 @@ class _BoardList extends StatelessWidget {
   }
 }
 
-class _WeekList extends StatelessWidget {
+class _PlannerView extends StatelessWidget {
   final List<TaskInstance> instances;
+  final List<TaskTemplate> templates;
   final String meId;
-  final Future<void> Function(String id) onClaim;
-  final Future<void> Function(String id) onUnclaim;
+  final Future<void> Function(String id, String templateId) onClaim;
+  final Future<void> Function(String id, String templateId) onUnclaim;
   final Future<void> Function(String id) onComplete;
   final Future<void> Function(TaskInstance instance) onOpen;
 
-  const _WeekList({
+  const _PlannerView({
     required this.instances,
+    required this.templates,
     required this.meId,
     required this.onClaim,
     required this.onUnclaim,
@@ -541,38 +631,113 @@ class _WeekList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (instances.isEmpty) return const Center(child: Text('Geen tasks in weekoverzicht.'));
+    final today = DateTime.now();
+
+    // Niet-herhaalbare tasks alleen op vandaag tonen
+    final visible = instances.where((i) {
+      final tmpl = templates.where((t) => t.id == i.templateId).firstOrNull;
+      if (tmpl != null && !tmpl.isRepeatable) {
+        final d = i.scheduledFor;
+        return d.year == today.year && d.month == today.month && d.day == today.day;
+      }
+      return true;
+    }).toList();
+
+    if (visible.isEmpty) return const Center(child: Text('Geen tasks in deze week.'));
+
+    final dayKeys = <String>[];
     final grouped = <String, List<TaskInstance>>{};
-    for (final i in instances) {
+    for (final i in visible) {
       final k = DateFormat('EEE dd MMM').format(i.scheduledFor);
+      if (!grouped.containsKey(k)) dayKeys.add(k);
       grouped.putIfAbsent(k, () => []).add(i);
     }
 
-    return ListView(
-      padding: const EdgeInsets.all(12),
-      children: [
-        for (final e in grouped.entries) ...[
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8, top: 6),
-            child: Text(e.key, style: Theme.of(context).textTheme.titleMedium),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final key in dayKeys)
+                _DayColumn(
+                  dayLabel: key,
+                  instances: grouped[key]!,
+                  columnHeight: constraints.maxHeight - 24,
+                  meId: meId,
+                  onClaim: onClaim,
+                  onUnclaim: onUnclaim,
+                  onComplete: onComplete,
+                  onOpen: onOpen,
+                ),
+            ],
           ),
-          ...e.value.asMap().entries.map((entry) {
-            final i = entry.value;
-            return EnterMotion(
-              delayMs: 40 + (entry.key * 24),
-              child: _TaskCard(
-                i: i,
-                meId: meId,
-                onClaim: onClaim,
-                onUnclaim: onUnclaim,
-                onComplete: onComplete,
-                onOpen: () => onOpen(i),
+        );
+      },
+    );
+  }
+}
+
+class _DayColumn extends StatelessWidget {
+  final String dayLabel;
+  final List<TaskInstance> instances;
+  final double columnHeight;
+  final String meId;
+  final Future<void> Function(String id, String templateId) onClaim;
+  final Future<void> Function(String id, String templateId) onUnclaim;
+  final Future<void> Function(String id) onComplete;
+  final Future<void> Function(TaskInstance instance) onOpen;
+
+  const _DayColumn({
+    required this.dayLabel,
+    required this.instances,
+    required this.columnHeight,
+    required this.meId,
+    required this.onClaim,
+    required this.onUnclaim,
+    required this.onComplete,
+    required this.onOpen,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 230,
+      height: columnHeight,
+      child: Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(dayLabel, style: Theme.of(context).textTheme.titleMedium),
+            ),
+            const Divider(height: 1),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView(
+                children: [
+                  for (var idx = 0; idx < instances.length; idx++)
+                    EnterMotion(
+                      delayMs: 40 + (idx * 24),
+                      child: _TaskCard(
+                        i: instances[idx],
+                        meId: meId,
+                        onClaim: onClaim,
+                        onUnclaim: onUnclaim,
+                        onComplete: onComplete,
+                        onOpen: () => onOpen(instances[idx]),
+                      ),
+                    ),
+                ],
               ),
-            );
-          }),
-          const Divider(),
-        ]
-      ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -580,8 +745,8 @@ class _WeekList extends StatelessWidget {
 class _TaskCard extends StatelessWidget {
   final TaskInstance i;
   final String meId;
-  final Future<void> Function(String id) onClaim;
-  final Future<void> Function(String id) onUnclaim;
+  final Future<void> Function(String id, String templateId) onClaim;
+  final Future<void> Function(String id, String templateId) onUnclaim;
   final Future<void> Function(String id) onComplete;
   final VoidCallback onOpen;
 
@@ -598,8 +763,6 @@ class _TaskCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final canClaim = i.status == TaskInstanceStatus.open || i.status == TaskInstanceStatus.claimed;
     final canComplete = i.status != TaskInstanceStatus.completed && i.status != TaskInstanceStatus.missed;
-    final hasDescription = i.description.trim().isNotEmpty;
-
     final isClaimedByMe = i.claimedByUserId == meId;
 
     return Container(
@@ -617,11 +780,11 @@ class _TaskCard extends StatelessWidget {
               Row(
                 children: [
                   Expanded(child: Text(i.title, style: const TextStyle(fontWeight: FontWeight.w700))),
-                  if (hasDescription)
-                    const Tooltip(message: 'Heeft description', child: Icon(Icons.notes_rounded, size: 18))
-                  else
-                    const Tooltip(message: 'Lege description', child: Icon(Icons.notes, size: 18)),
-                  const SizedBox(width: 8),
+                  // if (hasDescription)
+                  //   const Tooltip(message: 'Heeft description', child: Icon(Icons.notes_rounded, size: 18))
+                  // else
+                  //   const Tooltip(message: 'Lege description', child: Icon(Icons.notes, size: 18)),
+                  // const SizedBox(width: 8),
                   _StatusPill(status: i.status),
                 ],
               ),
@@ -639,9 +802,9 @@ class _TaskCard extends StatelessWidget {
                     onPressed: canClaim
                         ? () {
                             if (isClaimedByMe) {
-                              onUnclaim(i.id);
+                              onUnclaim(i.id, i.templateId);
                             } else {
-                              onClaim(i.id);
+                              onClaim(i.id, i.templateId);
                             }
                           }
                         : null,

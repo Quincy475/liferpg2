@@ -29,7 +29,11 @@ class TaskMvpRepository {
         .map((s) => s.docs.map((d) => TaskTemplate.fromMap(d.id, d.data())).toList());
   }
 
-  Future<void> createTemplate({required String guildId, required TaskTemplate input}) async {
+  Future<void> createTemplate({
+    required String guildId,
+    required TaskTemplate input,
+    required String actorUserId,
+  }) async {
     final ref = _templates(guildId).doc();
     await ref.set({
       ...input.toMap(),
@@ -37,22 +41,43 @@ class TaskMvpRepository {
     });
     await _logEvent(
       guildId: guildId,
-      actorUserId: input.defaultAssigneeUserId ?? 'system',
+      actorUserId: actorUserId,
       type: 'created_template',
       templateId: ref.id,
       payload: {'title': input.title},
     );
   }
 
-  Future<void> updateTemplate({required String guildId, required TaskTemplate input}) async {
+  Future<void> updateTemplate({
+    required String guildId,
+    required TaskTemplate input,
+    required String actorUserId,
+  }) async {
     await _templates(guildId).doc(input.id).set(input.toMap(), SetOptions(merge: true));
+    await _logEvent(
+      guildId: guildId,
+      actorUserId: actorUserId,
+      type: 'updated_template',
+      templateId: input.id,
+      payload: {'title': input.title},
+    );
   }
 
-  Future<void> archiveTemplate({required String guildId, required String templateId}) async {
-    await _templates(guildId).doc(templateId).set({
-      'active': false,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+  Future<void> archiveTemplate({
+    required String guildId,
+    required String templateId,
+    required String actorUserId,
+  }) async {
+    final snap = await _templates(guildId).doc(templateId).get();
+    final title = (snap.data()?['title'] ?? '') as String;
+    await _templates(guildId).doc(templateId).delete();
+    await _logEvent(
+      guildId: guildId,
+      actorUserId: actorUserId,
+      type: 'deleted_template',
+      templateId: templateId,
+      payload: {'title': title},
+    );
   }
 
   Stream<List<TaskInstance>> watchWeekInstances({
@@ -105,8 +130,8 @@ class TaskMvpRepository {
           'dueAt': Timestamp.fromDate(dueAt),
           'takeoverAllowedAt': Timestamp.fromDate(takeover),
           'status': 'open',
-          'claimedByUserId': t.defaultAssigneeUserId,
-          'claimedAt': t.defaultAssigneeUserId == null ? null : FieldValue.serverTimestamp(),
+          'claimedByUserId': null,
+          'claimedAt': null,
           'completedByUserId': null,
           'completedAt': null,
           'coinsAwarded': t.coinsBase,
@@ -176,12 +201,13 @@ class TaskMvpRepository {
           SetOptions(merge: true));
     });
 
+    final snap2 = await _instances(guildId).doc(instanceId).get();
     await _logEvent(
       guildId: guildId,
       actorUserId: userId,
       type: 'claimed',
       instanceId: instanceId,
-      payload: {},
+      payload: {'title': (snap2.data()?['title'] ?? '') as String},
     );
   }
 
@@ -215,12 +241,13 @@ class TaskMvpRepository {
           SetOptions(merge: true));
     });
 
+    final snap2 = await _instances(guildId).doc(instanceId).get();
     await _logEvent(
       guildId: guildId,
       actorUserId: userId,
       type: 'unclaimed',
       instanceId: instanceId,
-      payload: {},
+      payload: {'title': (snap2.data()?['title'] ?? '') as String},
     );
   }
 
@@ -231,6 +258,8 @@ class TaskMvpRepository {
   }) async {
     final ref = _instances(guildId).doc(instanceId);
     final userRef = _user(userId);
+    String instanceTitle = '';
+    int coinsTotal = 0;
 
     await _db.runTransaction((tx) async {
       final snap = await tx.get(ref);
@@ -244,6 +273,8 @@ class TaskMvpRepository {
       final base = ((m['coinsAwarded'] ?? 0) as num).toInt();
       final bonus = (m['bonusReason'] == 'carry_over_double') ? base : 0;
       final total = base + bonus;
+      instanceTitle = (m['title'] ?? '') as String;
+      coinsTotal = total;
 
       tx.set(
           ref,
@@ -272,7 +303,112 @@ class TaskMvpRepository {
       actorUserId: userId,
       type: 'completed',
       instanceId: instanceId,
-      payload: {},
+      payload: {'title': instanceTitle, 'coins': coinsTotal},
+    );
+  }
+
+  Future<void> removeOpenInstancesForTemplate({
+    required String guildId,
+    required String templateId,
+  }) async {
+    final q = await _instances(guildId)
+        .where('templateId', isEqualTo: templateId)
+        .where('status', whereIn: ['open', 'claimed'])
+        .get();
+    final batch = _db.batch();
+    for (final doc in q.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
+  }
+
+  Future<void> syncTemplateToOpenInstances({
+    required String guildId,
+    required String templateId,
+    required String newTitle,
+    required int newCoins,
+  }) async {
+    final q = await _instances(guildId)
+        .where('templateId', isEqualTo: templateId)
+        .where('status', whereIn: ['open', 'claimed'])
+        .get();
+    final batch = _db.batch();
+    for (final doc in q.docs) {
+      batch.set(doc.reference, {
+        'title': newTitle,
+        'coinsAwarded': newCoins,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    }
+    await batch.commit();
+  }
+
+  Future<void> claimAllFutureInstances({
+    required String guildId,
+    required String templateId,
+    required String userId,
+  }) async {
+    final n = DateTime.now();
+    final todayStart = Timestamp.fromDate(DateTime(n.year, n.month, n.day));
+    final q = await _instances(guildId)
+        .where('templateId', isEqualTo: templateId)
+        .where('scheduledFor', isGreaterThanOrEqualTo: todayStart)
+        .where('status', whereIn: ['open', 'claimed'])
+        .get();
+
+    final batch = _db.batch();
+    for (final doc in q.docs) {
+      batch.set(doc.reference, {
+        'status': 'claimed',
+        'claimedByUserId': userId,
+        'claimedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    }
+    await batch.commit();
+    final tmplSnap = await _templates(guildId).doc(templateId).get();
+    final tmplTitle = (tmplSnap.data()?['title'] ?? '') as String;
+    await _logEvent(
+      guildId: guildId,
+      actorUserId: userId,
+      type: 'claimed_all_future',
+      templateId: templateId,
+      payload: {'title': tmplTitle},
+    );
+  }
+
+  Future<void> unclaimAllFutureInstances({
+    required String guildId,
+    required String templateId,
+    required String userId,
+  }) async {
+    final n = DateTime.now();
+    final todayStart = Timestamp.fromDate(DateTime(n.year, n.month, n.day));
+    final q = await _instances(guildId)
+        .where('templateId', isEqualTo: templateId)
+        .where('scheduledFor', isGreaterThanOrEqualTo: todayStart)
+        .where('claimedByUserId', isEqualTo: userId)
+        .where('status', whereIn: ['open', 'claimed'])
+        .get();
+
+    final batch = _db.batch();
+    for (final doc in q.docs) {
+      batch.set(doc.reference, {
+        'status': 'open',
+        'claimedByUserId': null,
+        'claimedAt': null,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    }
+    await batch.commit();
+    final tmplSnap = await _templates(guildId).doc(templateId).get();
+    final tmplTitle = (tmplSnap.data()?['title'] ?? '') as String;
+    await _logEvent(
+      guildId: guildId,
+      actorUserId: userId,
+      type: 'unclaimed_all_future',
+      templateId: templateId,
+      payload: {'title': tmplTitle},
     );
   }
 
