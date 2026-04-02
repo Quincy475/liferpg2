@@ -445,18 +445,7 @@ class TaskMvpRepository {
   }
 
   DateTime _defaultDueAt(TaskTemplate t, DateTime scheduled) {
-    switch (t.scheduleType) {
-      case TaskScheduleType.daily:
-        return DateTime(scheduled.year, scheduled.month, scheduled.day, 22, 0);
-      case TaskScheduleType.weekly:
-        return scheduled.add(const Duration(hours: 23));
-      case TaskScheduleType.monthly:
-        return scheduled.add(const Duration(hours: 23));
-      case TaskScheduleType.everyXDays:
-        return scheduled.add(const Duration(hours: 23));
-      case TaskScheduleType.custom:
-        return scheduled.add(const Duration(hours: 23));
-    }
+    return DateTime(scheduled.year, scheduled.month, scheduled.day, t.dueHour, 0);
   }
 
   List<DateTime> _generateDates(TaskTemplate t, DateTime from, DateTime to) {
@@ -495,7 +484,13 @@ class TaskMvpRepository {
       return out;
     }
 
-    out.add(start);
+    // custom (one-time): gebruik scheduledDate indien aanwezig, anders start
+    if (t.scheduledDate != null) {
+      final d = t.scheduledDate!;
+      out.add(DateTime(d.year, d.month, d.day));
+    } else {
+      out.add(start);
+    }
     return out;
   }
 }

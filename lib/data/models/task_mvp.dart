@@ -17,6 +17,8 @@ class TaskTemplate {
   final int takeoverAfterMinutes;
   final String carryOverPolicy;
   final bool active;
+  final int dueHour;
+  final DateTime? scheduledDate;
 
   const TaskTemplate({
     required this.id,
@@ -31,7 +33,16 @@ class TaskTemplate {
     this.takeoverAfterMinutes = 0,
     this.carryOverPolicy = 'none',
     this.active = true,
+    this.dueHour = 22,
+    this.scheduledDate,
   });
+
+  static DateTime? _dt(dynamic v) {
+    if (v == null) return null;
+    if (v is Timestamp) return v.toDate();
+    if (v is DateTime) return v;
+    return DateTime.tryParse(v.toString());
+  }
 
   static TaskTemplate fromMap(String id, Map<String, dynamic> m) {
     final scheduleRaw = m['scheduleType']?.toString() ?? 'daily';
@@ -53,6 +64,8 @@ class TaskTemplate {
       takeoverAfterMinutes: ((m['takeoverAfterMinutes'] ?? 0) as num).toInt(),
       carryOverPolicy: (m['carryOverPolicy'] ?? 'none') as String,
       active: (m['active'] ?? true) as bool,
+      dueHour: ((m['dueHour'] ?? 22) as num).toInt(),
+      scheduledDate: _dt(m['scheduledDate']),
     );
   }
 
@@ -68,6 +81,8 @@ class TaskTemplate {
         'takeoverAfterMinutes': takeoverAfterMinutes,
         'carryOverPolicy': carryOverPolicy,
         'active': active,
+        'dueHour': dueHour,
+        'scheduledDate': scheduledDate != null ? Timestamp.fromDate(scheduledDate!) : null,
         'updatedAt': FieldValue.serverTimestamp(),
       };
 }

@@ -7,7 +7,7 @@ import 'package:household_rpg/data/repositories/task_mvp_repo.dart';
 import 'package:household_rpg/theme/app_theme.dart';
 
 enum TaskViewMode { board, week }
-enum TaskFilterMode { all, mine, unclaimed }
+enum TaskFilterMode { openClaimed, mine, unclaimed, late, all }
 
 class TasksPage extends ConsumerStatefulWidget {
   const TasksPage({super.key});
@@ -18,7 +18,7 @@ class TasksPage extends ConsumerStatefulWidget {
 
 class _TasksPageState extends ConsumerState<TasksPage> {
   TaskViewMode _viewMode = TaskViewMode.board;
-  TaskFilterMode _filterMode = TaskFilterMode.all;
+  TaskFilterMode _filterMode = TaskFilterMode.openClaimed;
   DateTime _weekAnchor = DateTime.now();
   String? _lastBootstrapKey;
 
@@ -88,7 +88,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                         final live = loadedTemplates == null
                             ? instances
                             : instances.where((i) => loadedTemplates.any((t) => t.id == i.templateId)).toList();
-                        final filtered = _applyFilter(live, me.id);
+                        final filtered = _applyFilter(live, me.id, loadedTemplates ?? []);
                         final board = _boardViewInstances(filtered);
 
                         if (_viewMode == TaskViewMode.week) {
@@ -114,28 +114,28 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                       },
                     ),
                   ),
-                  EnterMotion(
-                    delayMs: 80,
-                    child: Container(
-                      color: Theme.of(context).colorScheme.surface,
-                      child: templatesAsync.when(
-                        loading: () => const SizedBox.shrink(),
-                        error: (_, __) => const SizedBox.shrink(),
-                        data: (templates) => _TemplateScroller(
-                          templates: templates,
-                          onEdit: (t) => _openTemplateEditDialog(context, existing: t),
-                          onArchive: (id) async {
-                            await ref.read(taskMvpRepoProvider).archiveTemplate(
-                                  guildId: me.guildId!,
-                                  templateId: id,
-                                  actorUserId: me.id,
-                                );
-                            await _manualRefresh(me.guildId!);
-                          },
-                        ),
-                      ),
-                    ),
-                  ),
+                  // EnterMotion(
+                  //   delayMs: 80,
+                  //   child: Container(
+                  //     color: Theme.of(context).colorScheme.surface,
+                  //     child: templatesAsync.when(
+                  //       loading: () => const SizedBox.shrink(),
+                  //       error: (_, __) => const SizedBox.shrink(),
+                  //       data: (templates) => _TemplateScroller(
+                  //         templates: templates,
+                  //         onEdit: (t) => _openTemplateEditDialog(context, existing: t),
+                  //         onArchive: (id) async {
+                  //           await ref.read(taskMvpRepoProvider).archiveTemplate(
+                  //                 guildId: me.guildId!,
+                  //                 templateId: id,
+                  //                 actorUserId: me.id,
+                  //               );
+                  //           await _manualRefresh(me.guildId!);
+                  //         },
+                  //       ),
+                  //     ),
+                  //   ),
+                  // ),
                 ],
               );
             },
@@ -144,7 +144,54 @@ class _TasksPageState extends ConsumerState<TasksPage> {
       ),
     );
   }
+List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
+  final byTemplate = <String, List<TaskInstance>>{};
 
+  for (final i in instances) {
+    byTemplate.putIfAbsent(i.templateId, () => []).add(i);
+  }
+
+  final today = DateTime.now();
+  final todayStart = DateTime(today.year, today.month, today.day);
+
+  final result = <TaskInstance>[];
+
+  for (final group in byTemplate.values) {
+    group.sort((a, b) => a.scheduledFor.compareTo(b.scheduledFor));
+
+    final pending = group
+        .where((e) => e.status != TaskInstanceStatus.completed)
+        .toList();
+
+    if (pending.isEmpty) {
+      result.add(group.last);
+      continue;
+    }
+
+    // 1. Vandaag eerst
+    final todayInst = pending.where((e) {
+      final d = e.scheduledFor;
+      return d.year == today.year &&
+          d.month == today.month &&
+          d.day == today.day;
+    }).firstOrNull;
+
+    if (todayInst != null) {
+      result.add(todayInst);
+      continue;
+    }
+
+    // 2. Anders eerstvolgende toekomst, anders laatste verleden
+    final future = pending
+        .where((e) => !e.scheduledFor.isBefore(todayStart))
+        .toList();
+
+    result.add(future.isNotEmpty ? future.first : pending.last);
+  }
+
+  result.sort((a, b) => a.scheduledFor.compareTo(b.scheduledFor));
+  return result;
+}
   void _bootstrapWeek({required String guildId}) {
     final key = '${guildId}_${_weekStart.toIso8601String()}';
     if (_lastBootstrapKey == key) return;
@@ -231,13 +278,13 @@ class _TasksPageState extends ConsumerState<TasksPage> {
             child: Row(
               children: [
                 ChoiceChip(
-                  label: const Text('All'),
-                  selected: _filterMode == TaskFilterMode.all,
-                  onSelected: (_) => setState(() => _filterMode = TaskFilterMode.all),
+                  label: const Text('Open'),
+                  selected: _filterMode == TaskFilterMode.openClaimed,
+                  onSelected: (_) => setState(() => _filterMode = TaskFilterMode.openClaimed),
                 ),
                 const SizedBox(width: 8),
                 ChoiceChip(
-                  label: const Text('Claimed by me'),
+                  label: const Text('Mijn taken'),
                   selected: _filterMode == TaskFilterMode.mine,
                   onSelected: (_) => setState(() => _filterMode = TaskFilterMode.mine),
                 ),
@@ -247,6 +294,18 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                   selected: _filterMode == TaskFilterMode.unclaimed,
                   onSelected: (_) => setState(() => _filterMode = TaskFilterMode.unclaimed),
                 ),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  label: const Text('Te laat'),
+                  selected: _filterMode == TaskFilterMode.late,
+                  onSelected: (_) => setState(() => _filterMode = TaskFilterMode.late),
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  label: const Text('Alle'),
+                  selected: _filterMode == TaskFilterMode.all,
+                  onSelected: (_) => setState(() => _filterMode = TaskFilterMode.all),
+                ),
               ],
             ),
           ),
@@ -255,16 +314,69 @@ class _TasksPageState extends ConsumerState<TasksPage> {
     );
   }
 
-  List<TaskInstance> _applyFilter(List<TaskInstance> all, String meId) {
-    switch (_filterMode) {
-      case TaskFilterMode.mine:
-        return all.where((i) => i.claimedByUserId == meId).toList();
-      case TaskFilterMode.unclaimed:
-        return all.where((i) => i.claimedByUserId == null).toList();
-      case TaskFilterMode.all:
-        return all;
-    }
+  List<TaskInstance> _applyFilter(
+  List<TaskInstance> all,
+  String meId,
+  List<TaskTemplate> templates,
+) {
+  final now = DateTime.now();
+  final todayStart = DateTime(now.year, now.month, now.day);
+
+  List<TaskInstance> filtered;
+
+  switch (_filterMode) {
+    case TaskFilterMode.openClaimed:
+      filtered = all.where((i) =>
+        i.status == TaskInstanceStatus.open ||
+        i.status == TaskInstanceStatus.claimed).toList();
+      break;
+
+    case TaskFilterMode.mine:
+      filtered = all.where((i) {
+        if (i.claimedByUserId != meId ||
+            i.status != TaskInstanceStatus.claimed) return false;
+
+        final tmpl = templates.where((t) => t.id == i.templateId).firstOrNull;
+
+        if (tmpl?.isRepeatable == true) {
+          return !i.scheduledFor.isBefore(todayStart);
+        }
+        return true;
+      }).toList();
+      break;
+
+    case TaskFilterMode.unclaimed:
+      filtered = all.where((i) {
+        if (i.claimedByUserId != null ||
+            i.status != TaskInstanceStatus.open) return false;
+
+        final tmpl = templates.where((t) => t.id == i.templateId).firstOrNull;
+
+        if (tmpl?.isRepeatable == true) {
+          return !i.scheduledFor.isBefore(todayStart);
+        }
+        return true;
+      }).toList();
+      break;
+
+    case TaskFilterMode.late:
+      return all.where((i) {
+        final tmpl = templates.where((t) => t.id == i.templateId).firstOrNull;
+
+        if (tmpl?.isRepeatable != false) return false;
+
+        return i.status == TaskInstanceStatus.missed ||
+            ((i.status == TaskInstanceStatus.open ||
+                    i.status == TaskInstanceStatus.claimed) &&
+                i.dueAt.isBefore(now));
+      }).toList();
+
+    case TaskFilterMode.all:
+      return all;
   }
+
+  return _pickRelevantPerTemplate(filtered);
+}
 
   List<TaskInstance> _boardViewInstances(List<TaskInstance> instances) {
     final byTemplate = <String, List<TaskInstance>>{};
@@ -272,11 +384,25 @@ class _TasksPageState extends ConsumerState<TasksPage> {
       byTemplate.putIfAbsent(i.templateId, () => []).add(i);
     }
 
+    final today = DateTime.now();
+    final todayStart = DateTime(today.year, today.month, today.day);
+
     final out = <TaskInstance>[];
     for (final group in byTemplate.values) {
       group.sort((a, b) => a.scheduledFor.compareTo(b.scheduledFor));
       final pending = group.where((e) => e.status != TaskInstanceStatus.completed).toList();
-      out.add(pending.isNotEmpty ? pending.first : group.last);
+      if (pending.isEmpty) { out.add(group.last); continue; }
+
+      // 1. Vandaag
+      final todayInst = pending.where((e) {
+        final d = e.scheduledFor;
+        return d.year == today.year && d.month == today.month && d.day == today.day;
+      }).firstOrNull;
+      if (todayInst != null) { out.add(todayInst); continue; }
+
+      // 2. Eerstvolgende toekomstige, anders meest recente verleden
+      final future = pending.where((e) => !e.scheduledFor.isBefore(todayStart)).toList();
+      out.add(future.isNotEmpty ? future.first : pending.last);
     }
 
     out.sort((a, b) => a.scheduledFor.compareTo(b.scheduledFor));
@@ -461,9 +587,22 @@ class _TasksPageState extends ConsumerState<TasksPage> {
 
     final titleC = TextEditingController(text: existing?.title ?? '');
     final descC = TextEditingController(text: existing?.description ?? '');
-    final coinC = TextEditingController(text: (existing?.coinsBase ?? 25).toString());
+    final coinC = TextEditingController(text: (existing?.coinsBase ?? 2).toString());
     final intervalC = TextEditingController(text: (existing?.intervalValue ?? 1).toString());
-    TaskScheduleType schedule = existing?.scheduleType ?? TaskScheduleType.daily;
+    final isExistingOneTime = existing?.scheduleType == TaskScheduleType.custom || existing?.isRepeatable == false;
+    TaskScheduleType schedule = (existing?.scheduleType == TaskScheduleType.custom || existing?.scheduleType == null)
+        ? TaskScheduleType.daily
+        : existing!.scheduleType;
+    bool isOneTime = isExistingOneTime;
+    int dueHour = existing?.dueHour ?? 22;
+    DateTime scheduledDate = existing?.scheduledDate ?? DateTime.now();
+
+    const scheduleLabels = {
+      TaskScheduleType.daily: 'Dagelijks',
+      TaskScheduleType.weekly: 'Wekelijks',
+      TaskScheduleType.monthly: 'Maandelijks',
+      TaskScheduleType.everyXDays: 'Elke X dagen',
+    };
 
     final action = await showDialog<String>(
       context: context,
@@ -472,30 +611,86 @@ class _TasksPageState extends ConsumerState<TasksPage> {
           title: Text(existing == null ? 'Nieuw task template' : 'Task bewerken'),
           content: SingleChildScrollView(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TextField(controller: titleC, decoration: const InputDecoration(labelText: 'Title')),
+                TextField(controller: titleC, decoration: const InputDecoration(labelText: 'Titel')),
                 const SizedBox(height: 10),
-                TextField(controller: descC, decoration: const InputDecoration(labelText: 'Description')),
+                TextField(controller: descC, decoration: const InputDecoration(labelText: 'Beschrijving')),
                 const SizedBox(height: 10),
                 TextField(
                   controller: coinC,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(labelText: 'Coins'),
                 ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<TaskScheduleType>(
-                  value: schedule,
-                  decoration: const InputDecoration(labelText: 'Schedule'),
-                  items: TaskScheduleType.values
-                      .map((s) => DropdownMenuItem(value: s, child: Text(s.name)))
-                      .toList(),
-                  onChanged: (v) => setS(() => schedule = v ?? TaskScheduleType.daily),
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Eenmalig'),
+                  subtitle: const Text('Task wordt slechts één keer aangemaakt'),
+                  value: isOneTime,
+                  onChanged: (v) => setS(() => isOneTime = v),
                 ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: intervalC,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Interval value'),
+                if (isOneTime) ...[
+                  const SizedBox(height: 4),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Datum'),
+                    subtitle: Text(DateFormat('EEE d MMM yyyy').format(scheduledDate)),
+                    trailing: const Icon(Icons.calendar_today),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: c,
+                        initialDate: scheduledDate,
+                        firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                        lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
+                      );
+                      if (picked != null) setS(() => scheduledDate = picked);
+                    },
+                  ),
+                ],
+                if (!isOneTime) ...[
+                  const SizedBox(height: 4),
+                  DropdownButtonFormField<TaskScheduleType>(
+                    value: schedule,
+                    decoration: const InputDecoration(labelText: 'Herhaling'),
+                    items: scheduleLabels.entries
+                        .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                        .toList(),
+                    onChanged: (v) => setS(() => schedule = v ?? TaskScheduleType.daily),
+                  ),
+                  if (schedule == TaskScheduleType.everyXDays) ...[
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: intervalC,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Elke X dagen'),
+                    ),
+                  ],
+                ],
+                const SizedBox(height: 16),
+                Text('Gepland om', style: Theme.of(c).textTheme.bodySmall),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.remove),
+                      onPressed: () => setS(() => dueHour = (dueHour - 1).clamp(0, 23)),
+                    ),
+                    SizedBox(
+                      width: 52,
+                      child: Text(
+                        '${dueHour.toString().padLeft(2, '0')}:00',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(c).textTheme.titleMedium,
+                      ),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.add),
+                      onPressed: () => setS(() => dueHour = (dueHour + 1).clamp(0, 23)),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -506,8 +701,8 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                 onPressed: () => Navigator.pop(c, 'delete'),
                 child: const Text('Delete'),
               ),
-            TextButton(onPressed: () => Navigator.pop(c, 'cancel'), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(c, 'save'), child: const Text('Save')),
+            TextButton(onPressed: () => Navigator.pop(c, 'cancel'), child: const Text('Annuleren')),
+            FilledButton(onPressed: () => Navigator.pop(c, 'save'), child: const Text('Opslaan')),
           ],
         ),
       ),
@@ -531,12 +726,14 @@ class _TasksPageState extends ConsumerState<TasksPage> {
       title: titleC.text.trim(),
       description: descC.text.trim(),
       coinsBase: int.tryParse(coinC.text.trim()) ?? 0,
-      isRepeatable: true,
-      scheduleType: schedule,
+      isRepeatable: !isOneTime,
+      scheduleType: isOneTime ? TaskScheduleType.custom : schedule,
       intervalValue: int.tryParse(intervalC.text.trim()) ?? 1,
       defaultAssigneeUserId: null,
       takeoverAfterMinutes: 60,
       carryOverPolicy: 'double_next_success',
+      dueHour: dueHour,
+      scheduledDate: isOneTime ? scheduledDate : null,
     );
 
     if (existing == null) {
