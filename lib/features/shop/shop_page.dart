@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:household_rpg/app/session_providers.dart';
 import 'package:household_rpg/data/models/models.dart';
+import 'package:household_rpg/data/repositories/task_mvp_repo.dart';
 import 'package:household_rpg/theme/app_theme.dart';
 
 class ShopPage extends ConsumerWidget {
@@ -114,7 +115,7 @@ class ShopPage extends ConsumerWidget {
                                         children: [
                                           FilledButton.icon(
                                             onPressed: () =>
-                                                _buyWithConfirm(context, ref, me, item),
+                                                _buyWithConfirm(context, ref, me, item, me.guildId!),
                                             icon: const Icon(Icons.shopping_bag_outlined),
                                             label: const Text('Buy'),
                                           ),
@@ -162,7 +163,7 @@ class ShopPage extends ConsumerWidget {
   }
 
   Future<void> _buyWithConfirm(
-      BuildContext context, WidgetRef ref, UserProfile me, ShopItem item) async {
+      BuildContext context, WidgetRef ref, UserProfile me, ShopItem item, String guildId) async {
     final yes = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
@@ -176,10 +177,10 @@ class ShopPage extends ConsumerWidget {
     );
 
     if (yes != true) return;
-    await _buy(context, ref, me, item);
+    await _buy(context, ref, me, item, guildId);
   }
 
-  Future<void> _buy(BuildContext context, WidgetRef ref, UserProfile me, ShopItem item) async {
+  Future<void> _buy(BuildContext context, WidgetRef ref, UserProfile me, ShopItem item, String guildId) async {
     final ok = await ref.read(fsUserRepoProvider).purchaseItem(userId: me.id, item: item);
     if (!context.mounted) return;
     if (!ok) {
@@ -189,6 +190,12 @@ class ShopPage extends ConsumerWidget {
     await ref
         .read(fsUserRepoProvider)
         .addToInventory(userId: me.id, itemId: item.id, itemName: item.name);
+    await ref.read(taskMvpRepoProvider).logShopPurchase(
+      guildId: guildId,
+      actorUserId: me.id,
+      itemName: item.name,
+      price: item.price,
+    );
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${item.name} gekocht.')));
   }

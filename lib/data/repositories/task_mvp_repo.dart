@@ -412,6 +412,20 @@ class TaskMvpRepository {
     );
   }
 
+  Future<void> logShopPurchase({
+    required String guildId,
+    required String actorUserId,
+    required String itemName,
+    required int price,
+  }) async {
+    await _logEvent(
+      guildId: guildId,
+      actorUserId: actorUserId,
+      type: 'purchased_item',
+      payload: {'title': itemName, 'coins': price},
+    );
+  }
+
   Future<void> _logEvent({
     required String guildId,
     required String actorUserId,

@@ -307,10 +307,16 @@ class _ActivityCard extends ConsumerWidget {
   const _ActivityCard({required this.guildId});
 
   static const _showTypes = {
-    'completed', 'claimed', 'unclaimed',
-    'claimed_all_future', 'unclaimed_all_future',
-    'created_template', 'updated_template', 'deleted_template',
-    'missed',
+    'completed',
+    'purchased_item',
+    // 'claimed',
+    // 'unclaimed',
+    // 'claimed_all_future',
+    // 'unclaimed_all_future',
+    // 'created_template',
+    // 'updated_template',
+    // 'deleted_template',
+    // 'missed',
   };
 
   @override
@@ -379,6 +385,8 @@ class _ActivityCard extends ConsumerWidget {
         return '$actor verwijderde template "$title"';
       case 'missed':
         return '"$title" is gemist';
+      case 'purchased_item':
+        return '$actor kocht "$title" voor $coins 🪙';
       default:
         return '$actor: ${e.type}';
     }
@@ -394,6 +402,7 @@ class _ActivityCard extends ConsumerWidget {
     'updated_template'     => '✏️',
     'deleted_template'     => '🗑️',
     'missed'               => '⚠️',
+    'purchased_item'       => '🛍️',
     _                      => '📝',
   };
 }
