@@ -13,7 +13,8 @@ class UserProfile {
   final bool crown; // heeft current week crown?
   final DateTime? lastReset; // week reset marker
   final String? guildId;
-   final Map<SkillType, List<String>> perks;
+  final Map<SkillType, List<String>> perks;
+  final int soloCoins;
 
   UserProfile({
     required this.id,
@@ -27,6 +28,7 @@ class UserProfile {
     this.lastReset,
     this.guildId,
     this.perks = const {},
+    this.soloCoins = 0,
   });
 
   UserProfile copyWith({
@@ -40,6 +42,7 @@ class UserProfile {
     DateTime? lastReset,
     String? guildId,
     Map<SkillType, List<String>>? perks,
+    int? soloCoins,
   }) =>
       UserProfile(
         id: id,
@@ -53,6 +56,7 @@ class UserProfile {
         lastReset: lastReset ?? this.lastReset,
         guildId: guildId ?? this.guildId,
         perks: perks ?? this.perks,
+        soloCoins: soloCoins ?? this.soloCoins,
       );
 
   Map<String, dynamic> toMap() => {
@@ -60,6 +64,7 @@ class UserProfile {
         'name': name,
         'skillXp': skillXp.map((k, v) => MapEntry(k.index.toString(), v)),
         'coins': coins,
+        'soloCoins': soloCoins,
         'weeklyPoints': weeklyPoints,
         'streaks': streaks,
         'badges': badges.toList(),
@@ -123,11 +128,14 @@ class UserProfile {
       perks.putIfAbsent(s, () => <String>[]);
     }
 
+    final soloCoins = (m['soloCoins'] ?? 0) as int;
+
     return UserProfile(
       id: id,
       name: name,
       skillXp: skillXp,
       coins: coins,
+      soloCoins: soloCoins,
       weeklyPoints: weeklyPoints,
       streaks: streaks,
       badges: badges,

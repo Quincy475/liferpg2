@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:household_rpg/app/session_providers.dart';
 import 'package:household_rpg/data/models/models.dart';
 import 'package:household_rpg/data/repositories/task_mvp_repo.dart';
+import 'package:household_rpg/features/skills/skill_tree_page.dart';
 import 'package:household_rpg/theme/app_theme.dart';
 
 class ProfilePage extends ConsumerWidget {
@@ -29,6 +30,8 @@ class ProfilePage extends ConsumerWidget {
                 EnterMotion(delayMs: 20, child: _NameCard(me: me)),
                 const SizedBox(height: 12),
                 EnterMotion(delayMs: 100, child: _StatsCard(me: me)),
+                const SizedBox(height: 12),
+                EnterMotion(delayMs: 120, child: _SkillXpCard(me: me)),
                 const SizedBox(height: 12),
                 const EnterMotion(delayMs: 140, child: _ThemeCard()),
                 const SizedBox(height: 12),
@@ -257,8 +260,95 @@ class _StatsCard extends StatelessWidget {
           children: [
             Text('Stats', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
-            Text('Total coins: ${me.coins}'),
+            Text('Guild coins: ${me.coins} 🪙'),
+            Text('Solo coins: ${me.soloCoins} 🌟'),
             Text('Weekly points: ${me.weeklyPoints}'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SkillXpCard extends StatelessWidget {
+  final UserProfile me;
+  const _SkillXpCard({required this.me});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Vaardigheden', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              'Verdien XP via persoonlijke taken. Tik op een skill voor de skill tree.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            for (final skill in SkillType.values) ...[
+              _SkillRow(
+                skill: skill,
+                xp: me.skillXp[skill] ?? 0,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => SkillTreePage(skill: skill)),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SkillRow extends StatelessWidget {
+  final SkillType skill;
+  final int xp;
+  final VoidCallback onTap;
+  const _SkillRow({required this.skill, required this.xp, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final level = (xp / 200).floor();
+    final xpInLevel = xp % 200;
+    final progress = xpInLevel / 200.0;
+    final cs = Theme.of(context).colorScheme;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 84,
+              child: Text(
+                skill.label,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 8,
+                  backgroundColor: cs.surfaceContainerHighest,
+                  valueColor: AlwaysStoppedAnimation<Color>(cs.primary),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text('Lv $level', style: Theme.of(context).textTheme.bodySmall),
+            const Icon(Icons.chevron_right, size: 16),
           ],
         ),
       ),

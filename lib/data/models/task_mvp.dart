@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:household_rpg/data/models/enums.dart';
 
 enum TaskScheduleType { daily, weekly, monthly, everyXDays, custom }
 
@@ -19,6 +20,7 @@ class TaskTemplate {
   final bool active;
   final int dueHour;
   final DateTime? scheduledDate;
+  final SkillType? skillType;
 
   const TaskTemplate({
     required this.id,
@@ -35,6 +37,7 @@ class TaskTemplate {
     this.active = true,
     this.dueHour = 22,
     this.scheduledDate,
+    this.skillType,
   });
 
   static DateTime? _dt(dynamic v) {
@@ -51,6 +54,11 @@ class TaskTemplate {
       orElse: () => TaskScheduleType.daily,
     );
 
+    final skillIdx = m['skillTypeIndex'] as int?;
+    final skillType = (skillIdx != null && skillIdx >= 0 && skillIdx < SkillType.values.length)
+        ? SkillType.values[skillIdx]
+        : null;
+
     return TaskTemplate(
       id: id,
       title: (m['title'] ?? '') as String,
@@ -66,6 +74,7 @@ class TaskTemplate {
       active: (m['active'] ?? true) as bool,
       dueHour: ((m['dueHour'] ?? 22) as num).toInt(),
       scheduledDate: _dt(m['scheduledDate']),
+      skillType: skillType,
     );
   }
 
@@ -83,6 +92,7 @@ class TaskTemplate {
         'active': active,
         'dueHour': dueHour,
         'scheduledDate': scheduledDate != null ? Timestamp.fromDate(scheduledDate!) : null,
+        'skillTypeIndex': skillType?.index,
         'updatedAt': FieldValue.serverTimestamp(),
       };
 }

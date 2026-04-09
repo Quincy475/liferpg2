@@ -1,5 +1,6 @@
 enum SkillType { cooking, cleaning, fixing, laundry, admin /* ... */ }
 enum QuestType { daily, coop }
+enum AppMode { guild, personal }
 
 extension SkillTypeKey on SkillType {
   String get key {

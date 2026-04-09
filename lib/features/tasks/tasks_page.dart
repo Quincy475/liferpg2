@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:household_rpg/app/session_providers.dart';
 import 'package:household_rpg/data/models/models.dart';
 import 'package:household_rpg/data/repositories/task_mvp_repo.dart';
+import 'package:household_rpg/data/repositories/personal_task_repo.dart';
 import 'package:household_rpg/theme/app_theme.dart';
 
 enum TaskViewMode { board, week }
@@ -46,13 +47,23 @@ class _TasksPageState extends ConsumerState<TasksPage> {
   Widget build(BuildContext context) {
     final meAsync = ref.watch(currentUserProvider);
 
+    final mode = ref.watch(appModeProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Tasks'),
         actions: [
           IconButton(
             tooltip: 'Nieuw template',
-            onPressed: () => _openTemplateEditDialog(context),
+            onPressed: () {
+              final me = ref.read(currentUserProvider).value;
+              if (me == null) return;
+              if (mode == AppMode.personal) {
+                _openPersonalTemplateDialog(context, me);
+              } else {
+                _openTemplateEditDialog(context);
+              }
+            },
             icon: const Icon(Icons.add),
           ),
         ],
@@ -63,8 +74,22 @@ class _TasksPageState extends ConsumerState<TasksPage> {
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('Error: $e')),
             data: (me) {
-              if (me == null || me.guildId == null) {
-                return const Center(child: Text('Join of maak eerst een guild op Profile.'));
+              if (me == null) return const Center(child: Text('Geen user geladen'));
+
+              if (mode == AppMode.personal) {
+                return _buildPersonalContent(me);
+              }
+
+              // Guild mode: guild vereist
+              if (me.guildId == null) {
+                return Column(
+                  children: [
+                    EnterMotion(delayMs: 20, child: _headerControls()),
+                    const Expanded(
+                      child: Center(child: Text('Join of maak eerst een guild op Profile.')),
+                    ),
+                  ],
+                );
               }
 
               _bootstrapWeek(guildId: me.guildId!);
@@ -114,34 +139,69 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                       },
                     ),
                   ),
-                  // EnterMotion(
-                  //   delayMs: 80,
-                  //   child: Container(
-                  //     color: Theme.of(context).colorScheme.surface,
-                  //     child: templatesAsync.when(
-                  //       loading: () => const SizedBox.shrink(),
-                  //       error: (_, __) => const SizedBox.shrink(),
-                  //       data: (templates) => _TemplateScroller(
-                  //         templates: templates,
-                  //         onEdit: (t) => _openTemplateEditDialog(context, existing: t),
-                  //         onArchive: (id) async {
-                  //           await ref.read(taskMvpRepoProvider).archiveTemplate(
-                  //                 guildId: me.guildId!,
-                  //                 templateId: id,
-                  //                 actorUserId: me.id,
-                  //               );
-                  //           await _manualRefresh(me.guildId!);
-                  //         },
-                  //       ),
-                  //     ),
-                  //   ),
-                  // ),
                 ],
               );
             },
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildPersonalContent(UserProfile me) {
+    _bootstrapPersonalWeek(uid: me.id);
+
+    final instancesAsync = ref.watch(_personalWeekInstancesProvider((
+      uid: me.id,
+      start: _weekStart,
+      end: _weekEnd,
+    )));
+    final templatesAsync = ref.watch(_personalTemplatesProvider(me.id));
+
+    return Column(
+      children: [
+        EnterMotion(delayMs: 20, child: _headerControls()),
+        Expanded(
+          child: instancesAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => Center(child: Text('Error: $e')),
+            data: (instances) {
+              final loadedTemplates = templatesAsync.value;
+              final live = loadedTemplates == null
+                  ? instances
+                  : instances.where((i) => loadedTemplates.any((t) => t.id == i.templateId)).toList();
+              final board = _boardViewInstances(live);
+
+              if (live.isEmpty) {
+                return const Center(
+                  child: Text('Nog geen persoonlijke taken.\nTik op + om er één aan te maken.', textAlign: TextAlign.center),
+                );
+              }
+
+              if (_viewMode == TaskViewMode.week) {
+                return _PlannerView(
+                  instances: live,
+                  templates: loadedTemplates ?? [],
+                  meId: me.id,
+                  onClaim: (id, tid) async {},
+                  onUnclaim: (id, tid) async {},
+                  onComplete: (id) => _completePersonal(me.id, id),
+                  onOpen: (instance) => _openPersonalTaskDetails(context, me, instance),
+                );
+              }
+
+              return _BoardList(
+                instances: board,
+                meId: me.id,
+                onClaim: (id, tid) async {},
+                onUnclaim: (id, tid) async {},
+                onComplete: (id) => _completePersonal(me.id, id),
+                onOpen: (instance) => _openPersonalTaskDetails(context, me, instance),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
@@ -210,11 +270,265 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
     await ref.read(taskMvpRepoProvider).markOverdueAsMissed(guildId: guildId);
   }
 
+  void _bootstrapPersonalWeek({required String uid}) {
+    final key = '${uid}_personal_${_weekStart.toIso8601String()}';
+    if (_lastBootstrapKey == key) return;
+    _lastBootstrapKey = key;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await ref.read(personalTaskRepoProvider).ensureUpcomingInstances(
+            uid: uid,
+            from: _weekStart,
+            to: _weekEnd,
+          );
+    });
+  }
+
+  Future<void> _completePersonal(String uid, String instanceId) async {
+    try {
+      await ref.read(personalTaskRepoProvider).completeInstance(uid: uid, instanceId: instanceId);
+      ref.invalidate(_personalWeekInstancesProvider);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Persoonlijke taak voltooid + XP + solo coins.')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Mislukt: $e')));
+    }
+  }
+
+  Future<void> _openPersonalTaskDetails(
+    BuildContext context,
+    UserProfile me,
+    TaskInstance instance,
+  ) async {
+    final templates = await ref.read(personalTaskRepoProvider).watchTemplates(me.id).first;
+    TaskTemplate? template;
+    for (final t in templates) {
+      if (t.id == instance.templateId) { template = t; break; }
+    }
+    if (template == null) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text(template!.title),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (template.description.trim().isNotEmpty) ...[
+                Text(template.description),
+                const SizedBox(height: 12),
+              ],
+              Text('Vaardigheid: ${template.skillType?.label ?? 'Geen'}'),
+              const SizedBox(height: 4),
+              Text('Solo coins: ${template.coinsBase}'),
+            ],
+          ),
+        ),
+        actions: [
+          OutlinedButton.icon(
+            onPressed: () {
+              Navigator.pop(c);
+              _openPersonalTemplateDialog(context, me, existing: template);
+            },
+            icon: const Icon(Icons.edit),
+            label: const Text('Edit'),
+          ),
+          FilledButton(onPressed: () => Navigator.pop(c), child: const Text('Sluiten')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openPersonalTemplateDialog(
+    BuildContext context,
+    UserProfile me, {
+    TaskTemplate? existing,
+  }) async {
+    final titleC = TextEditingController(text: existing?.title ?? '');
+    final descC = TextEditingController(text: existing?.description ?? '');
+    final coinC = TextEditingController(text: (existing?.coinsBase ?? 5).toString());
+    SkillType skill = existing?.skillType ?? SkillType.cooking;
+    TaskScheduleType schedule = (existing?.scheduleType == TaskScheduleType.custom || existing == null)
+        ? TaskScheduleType.daily
+        : existing!.scheduleType;
+    bool isOneTime = existing?.isRepeatable == false;
+    int dueHour = existing?.dueHour ?? 22;
+    DateTime scheduledDate = existing?.scheduledDate ?? DateTime.now();
+
+    const scheduleLabels = {
+      TaskScheduleType.daily: 'Dagelijks',
+      TaskScheduleType.weekly: 'Wekelijks',
+      TaskScheduleType.monthly: 'Maandelijks',
+      TaskScheduleType.everyXDays: 'Elke X dagen',
+    };
+
+    final action = await showDialog<String>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setS) => AlertDialog(
+          title: Text(existing == null ? 'Persoonlijke taak' : 'Bewerken'),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(controller: titleC, decoration: const InputDecoration(labelText: 'Titel')),
+                const SizedBox(height: 10),
+                TextField(controller: descC, decoration: const InputDecoration(labelText: 'Beschrijving')),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: coinC,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Solo coins (beloning)'),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<SkillType>(
+                  value: skill,
+                  decoration: const InputDecoration(labelText: 'Vaardigheid (XP)'),
+                  items: SkillType.values
+                      .map((s) => DropdownMenuItem(value: s, child: Text(s.label)))
+                      .toList(),
+                  onChanged: (v) => setS(() => skill = v ?? SkillType.cooking),
+                ),
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Eenmalig'),
+                  value: isOneTime,
+                  onChanged: (v) => setS(() => isOneTime = v),
+                ),
+                if (isOneTime) ...[
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Datum'),
+                    subtitle: Text(DateFormat('EEE d MMM yyyy').format(scheduledDate)),
+                    trailing: const Icon(Icons.calendar_today),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: c,
+                        initialDate: scheduledDate,
+                        firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                        lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
+                      );
+                      if (picked != null) setS(() => scheduledDate = picked);
+                    },
+                  ),
+                ],
+                if (!isOneTime) ...[
+                  DropdownButtonFormField<TaskScheduleType>(
+                    value: schedule,
+                    decoration: const InputDecoration(labelText: 'Herhaling'),
+                    items: scheduleLabels.entries
+                        .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                        .toList(),
+                    onChanged: (v) => setS(() => schedule = v ?? TaskScheduleType.daily),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                Text('Gepland om', style: Theme.of(c).textTheme.bodySmall),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.remove),
+                      onPressed: () => setS(() => dueHour = (dueHour - 1).clamp(0, 23)),
+                    ),
+                    SizedBox(
+                      width: 52,
+                      child: Text(
+                        '${dueHour.toString().padLeft(2, '0')}:00',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(c).textTheme.titleMedium,
+                      ),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.add),
+                      onPressed: () => setS(() => dueHour = (dueHour + 1).clamp(0, 23)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            if (existing != null)
+              TextButton(
+                onPressed: () => Navigator.pop(c, 'delete'),
+                child: const Text('Verwijderen'),
+              ),
+            TextButton(onPressed: () => Navigator.pop(c, 'cancel'), child: const Text('Annuleren')),
+            FilledButton(onPressed: () => Navigator.pop(c, 'save'), child: const Text('Opslaan')),
+          ],
+        ),
+      ),
+    );
+
+    if (action == null || action == 'cancel') return;
+
+    if (action == 'delete' && existing != null) {
+      await ref.read(personalTaskRepoProvider).archiveTemplate(uid: me.id, templateId: existing.id);
+      await ref.read(personalTaskRepoProvider).removeOpenInstancesForTemplate(uid: me.id, templateId: existing.id);
+      _lastBootstrapKey = '';
+      ref.invalidate(_personalTemplatesProvider(me.id));
+      ref.invalidate(_personalWeekInstancesProvider);
+      return;
+    }
+
+    final input = TaskTemplate(
+      id: existing?.id ?? '',
+      title: titleC.text.trim(),
+      description: descC.text.trim(),
+      coinsBase: int.tryParse(coinC.text.trim()) ?? 5,
+      isRepeatable: !isOneTime,
+      scheduleType: isOneTime ? TaskScheduleType.custom : schedule,
+      intervalValue: 1,
+      takeoverAfterMinutes: 0,
+      carryOverPolicy: 'none',
+      dueHour: dueHour,
+      scheduledDate: isOneTime ? scheduledDate : null,
+      skillType: skill,
+    );
+
+    if (existing == null) {
+      await ref.read(personalTaskRepoProvider).createTemplate(uid: me.id, input: input);
+    } else {
+      await ref.read(personalTaskRepoProvider).updateTemplate(uid: me.id, input: input);
+    }
+
+    // Forceer re-bootstrap zodat nieuwe instanties worden aangemaakt
+    _lastBootstrapKey = '';
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await ref.read(personalTaskRepoProvider).ensureUpcomingInstances(
+            uid: me.id,
+            from: _weekStart,
+            to: _weekEnd,
+          );
+      ref.invalidate(_personalTemplatesProvider(me.id));
+      ref.invalidate(_personalWeekInstancesProvider);
+    });
+  }
+
   Widget _headerControls() {
+    final mode = ref.watch(appModeProvider);
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
       child: Column(
         children: [
+          // Modus toggle: Guild | Persoonlijk
+          SegmentedButton<AppMode>(
+            segments: const [
+              ButtonSegment(value: AppMode.guild, label: Text('Guild'), icon: Icon(Icons.group, size: 16)),
+              ButtonSegment(value: AppMode.personal, label: Text('Persoonlijk'), icon: Icon(Icons.person, size: 16)),
+            ],
+            selected: {mode},
+            onSelectionChanged: (v) => ref.read(appModeProvider.notifier).state = v.first,
+          ),
+          const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
@@ -755,6 +1069,21 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
 
 final _templatesProvider = StreamProvider.autoDispose.family<List<TaskTemplate>, String>((ref, gid) {
   return ref.read(taskMvpRepoProvider).watchTemplates(gid);
+});
+
+final _personalTemplatesProvider = StreamProvider.autoDispose.family<List<TaskTemplate>, String>((ref, uid) {
+  return ref.read(personalTaskRepoProvider).watchTemplates(uid);
+});
+
+typedef _PersonalWeekArg = ({String uid, DateTime start, DateTime end});
+
+final _personalWeekInstancesProvider =
+    StreamProvider.autoDispose.family<List<TaskInstance>, _PersonalWeekArg>((ref, arg) {
+  return ref.read(personalTaskRepoProvider).watchWeekInstances(
+        uid: arg.uid,
+        weekStart: arg.start,
+        weekEnd: arg.end,
+      );
 });
 
 typedef _WeekArg = ({String guildId, DateTime start, DateTime end});
