@@ -32,6 +32,7 @@ import 'package:household_rpg/data/repositories/task_repo.dart';
 import 'package:household_rpg/data/repositories/shop_repo.dart';
 import 'package:household_rpg/data/repositories/event_repo.dart';
 import 'package:household_rpg/data/repositories/raid_repo.dart';
+import 'package:household_rpg/data/repositories/personal_task_repo.dart';
 
 // Hive (voor thema)
 import 'package:household_rpg/data/local/hive_boxes.dart';
@@ -245,6 +246,15 @@ final eventRepoProvider = Provider<EventRepository>((_) => EventRepository());
 final raidRepoProvider = Provider<RaidRepository>((_) => RaidRepository());
 
 final furnitureReppoProvider  = Provider<FurnitureRepo>((_) => FurnitureRepo());
+
+/// ---------------------------------------------------------------------------
+/// Persoonlijke modus (v2)
+/// ---------------------------------------------------------------------------
+final appModeProvider = StateProvider<AppMode>((ref) => AppMode.guild);
+
+final personalTaskRepoProvider = Provider<PersonalTaskRepository>((ref) {
+  return PersonalTaskRepository(ref.read(firestoreProvider));
+});
 /// ---------------------------------------------------------------------------
 /// Quest state + controller (nu met echte uid uit Firebase i.p.v. const 'me')
 /// ---------------------------------------------------------------------------

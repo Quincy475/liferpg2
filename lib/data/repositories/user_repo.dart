@@ -192,6 +192,7 @@ class UserRepository {
         'name': defaultName,
         'skillXp': _emptySkillXpMap(),
         'coins': 0,
+        'soloCoins': 0,
         'weeklyPoints': 0,
         'streaks': <String, int>{},
         'badges': <String>[],
