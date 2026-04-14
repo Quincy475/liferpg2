@@ -5,6 +5,7 @@ import 'package:household_rpg/features/profile/auth_gate_page.dart';
 import 'package:household_rpg/features/profile/menu_page.dart';
 import 'package:household_rpg/features/profile/profile_page.dart';
 import 'package:household_rpg/features/shop/shop_page.dart';
+import 'package:household_rpg/features/chat/chat_page.dart';
 import 'package:household_rpg/features/tasks/tasks_page.dart';
 import 'package:household_rpg/theme/app_theme.dart';
 
@@ -36,6 +37,7 @@ class _HomeShellState extends ConsumerState<_HomeShell> {
 
   final _pages = const [
     TasksPage(),
+    ChatPage(),
     ShopPage(),
     ProfilePage(),
     MenuPage(),
@@ -56,6 +58,7 @@ class _HomeShellState extends ConsumerState<_HomeShell> {
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.checklist), label: 'Tasks'),
+          NavigationDestination(icon: Icon(Icons.auto_awesome), label: 'Planner'),
           NavigationDestination(icon: Icon(Icons.store), label: 'Shop'),
           NavigationDestination(icon: Icon(Icons.person), label: 'Profile'),
           NavigationDestination(icon: Icon(Icons.more_horiz), label: 'Menu'),
