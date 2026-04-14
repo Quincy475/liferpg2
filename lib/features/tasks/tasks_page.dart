@@ -187,6 +187,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                   onUnclaim: (id, tid) async {},
                   onComplete: (id) => _completePersonal(me.id, id),
                   onOpen: (instance) => _openPersonalTaskDetails(context, me, instance),
+                  showClaim: false,
                 );
               }
 
@@ -197,6 +198,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                 onUnclaim: (id, tid) async {},
                 onComplete: (id) => _completePersonal(me.id, id),
                 onOpen: (instance) => _openPersonalTaskDetails(context, me, instance),
+                showClaim: false,
               );
             },
           ),
@@ -1103,6 +1105,7 @@ class _BoardList extends StatelessWidget {
   final Future<void> Function(String id, String templateId) onUnclaim;
   final Future<void> Function(String id) onComplete;
   final Future<void> Function(TaskInstance instance) onOpen;
+  final bool showClaim;
 
   const _BoardList({
     required this.instances,
@@ -1111,6 +1114,7 @@ class _BoardList extends StatelessWidget {
     required this.onUnclaim,
     required this.onComplete,
     required this.onOpen,
+    this.showClaim = true,
   });
 
   @override
@@ -1129,6 +1133,7 @@ class _BoardList extends StatelessWidget {
               onUnclaim: onUnclaim,
               onComplete: onComplete,
               onOpen: () => onOpen(instances[idx]),
+              showClaim: showClaim,
             ),
           )
       ],
@@ -1144,6 +1149,7 @@ class _PlannerView extends StatelessWidget {
   final Future<void> Function(String id, String templateId) onUnclaim;
   final Future<void> Function(String id) onComplete;
   final Future<void> Function(TaskInstance instance) onOpen;
+  final bool showClaim;
 
   const _PlannerView({
     required this.instances,
@@ -1153,6 +1159,7 @@ class _PlannerView extends StatelessWidget {
     required this.onUnclaim,
     required this.onComplete,
     required this.onOpen,
+    this.showClaim = true,
   });
 
   @override
@@ -1197,6 +1204,7 @@ class _PlannerView extends StatelessWidget {
                   onUnclaim: onUnclaim,
                   onComplete: onComplete,
                   onOpen: onOpen,
+                  showClaim: showClaim,
                 ),
             ],
           ),
@@ -1215,6 +1223,7 @@ class _DayColumn extends StatelessWidget {
   final Future<void> Function(String id, String templateId) onUnclaim;
   final Future<void> Function(String id) onComplete;
   final Future<void> Function(TaskInstance instance) onOpen;
+  final bool showClaim;
 
   const _DayColumn({
     required this.dayLabel,
@@ -1225,6 +1234,7 @@ class _DayColumn extends StatelessWidget {
     required this.onUnclaim,
     required this.onComplete,
     required this.onOpen,
+    this.showClaim = true,
   });
 
   @override
@@ -1256,6 +1266,7 @@ class _DayColumn extends StatelessWidget {
                         onUnclaim: onUnclaim,
                         onComplete: onComplete,
                         onOpen: () => onOpen(instances[idx]),
+                        showClaim: showClaim,
                       ),
                     ),
                 ],
@@ -1275,6 +1286,7 @@ class _TaskCard extends StatelessWidget {
   final Future<void> Function(String id, String templateId) onUnclaim;
   final Future<void> Function(String id) onComplete;
   final VoidCallback onOpen;
+  final bool showClaim;
 
   const _TaskCard({
     required this.i,
@@ -1283,6 +1295,7 @@ class _TaskCard extends StatelessWidget {
     required this.onUnclaim,
     required this.onComplete,
     required this.onOpen,
+    this.showClaim = true,
   });
 
   @override
@@ -1306,17 +1319,12 @@ class _TaskCard extends StatelessWidget {
               Row(
                 children: [
                   Expanded(child: Text(i.title, style: const TextStyle(fontWeight: FontWeight.w700))),
-                  // if (hasDescription)
-                  //   const Tooltip(message: 'Heeft description', child: Icon(Icons.notes_rounded, size: 18))
-                  // else
-                  //   const Tooltip(message: 'Lege description', child: Icon(Icons.notes, size: 18)),
-                  // const SizedBox(width: 8),
-                  _StatusPill(status: i.status),
+                  if (showClaim) _StatusPill(status: i.status),
                 ],
               ),
               const SizedBox(height: 8),
               Text('🪙 ${i.coinsAwarded} • due ${DateFormat('EEE HH:mm').format(i.dueAt)}'),
-              if (i.claimedByUserId != null)
+              if (showClaim && i.claimedByUserId != null)
                 Text('Claimed by: ${i.claimedByUserId == meId ? 'Me' : i.claimedByUserId}'),
               const SizedBox(height: 8),
               Wrap(
@@ -1324,18 +1332,19 @@ class _TaskCard extends StatelessWidget {
                 runSpacing: 8,
                 children: [
                   OutlinedButton(onPressed: onOpen, child: const Text('Open')),
-                  OutlinedButton(
-                    onPressed: canClaim
-                        ? () {
-                            if (isClaimedByMe) {
-                              onUnclaim(i.id, i.templateId);
-                            } else {
-                              onClaim(i.id, i.templateId);
+                  if (showClaim)
+                    OutlinedButton(
+                      onPressed: canClaim
+                          ? () {
+                              if (isClaimedByMe) {
+                                onUnclaim(i.id, i.templateId);
+                              } else {
+                                onClaim(i.id, i.templateId);
+                              }
                             }
-                          }
-                        : null,
-                    child: Text(isClaimedByMe ? 'Unclaim' : 'Claim'),
-                  ),
+                          : null,
+                      child: Text(isClaimedByMe ? 'Unclaim' : 'Claim'),
+                    ),
                   FilledButton(
                     onPressed: canComplete ? () => onComplete(i.id) : null,
                     child: const Text('Complete'),
