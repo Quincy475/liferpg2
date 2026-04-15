@@ -5,6 +5,7 @@ import 'package:household_rpg/features/profile/auth_gate_page.dart';
 import 'package:household_rpg/features/profile/menu_page.dart';
 import 'package:household_rpg/features/profile/profile_page.dart';
 import 'package:household_rpg/features/shop/shop_page.dart';
+import 'package:household_rpg/features/leaderboard/leaderboard_page.dart';
 import 'package:household_rpg/features/tasks/tasks_page.dart';
 import 'package:household_rpg/theme/app_theme.dart';
 
@@ -36,6 +37,7 @@ class _HomeShellState extends ConsumerState<_HomeShell> {
 
   final _pages = const [
     TasksPage(),
+    LeaderboardPage(),
     ShopPage(),
     ProfilePage(),
     MenuPage(),
@@ -44,6 +46,7 @@ class _HomeShellState extends ConsumerState<_HomeShell> {
   @override
   Widget build(BuildContext context) {
     ref.watch(sessionBootstrapProvider);
+    ref.watch(weeklyResetProvider);
     final isSignedOut = ref.watch(isAnonymousSessionProvider);
     if (isSignedOut) {
       return const AuthGatePage(key: ValueKey('auth-gate-page'));
@@ -56,6 +59,7 @@ class _HomeShellState extends ConsumerState<_HomeShell> {
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.checklist), label: 'Tasks'),
+          NavigationDestination(icon: Icon(Icons.leaderboard), label: 'Guild'),
           NavigationDestination(icon: Icon(Icons.store), label: 'Shop'),
           NavigationDestination(icon: Icon(Icons.person), label: 'Profile'),
           NavigationDestination(icon: Icon(Icons.more_horiz), label: 'Menu'),

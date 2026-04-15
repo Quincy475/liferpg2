@@ -161,6 +161,30 @@ class PersonalTaskRepository {
     });
   }
 
+  /// Markeer persoonlijke taken als gemist als de dueAt verstreken is.
+  Future<void> markOverdueAsMissed({required String uid}) async {
+    final now = Timestamp.fromDate(DateTime.now());
+    final q = await _instances(uid)
+        .where('status', whereIn: ['open', 'claimed'])
+        .where('dueAt', isLessThan: now)
+        .get();
+
+    if (q.docs.isEmpty) return;
+
+    final batch = _db.batch();
+    for (final d in q.docs) {
+      batch.set(
+        d.reference,
+        {
+          'status': 'missed',
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+    }
+    await batch.commit();
+  }
+
   Future<void> removeOpenInstancesForTemplate({
     required String uid,
     required String templateId,

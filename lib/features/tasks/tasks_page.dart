@@ -282,6 +282,7 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
             from: _weekStart,
             to: _weekEnd,
           );
+      await ref.read(personalTaskRepoProvider).markOverdueAsMissed(uid: uid);
     });
   }
 

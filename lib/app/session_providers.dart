@@ -35,6 +35,7 @@ import 'package:household_rpg/data/repositories/raid_repo.dart';
 import 'package:household_rpg/data/repositories/personal_task_repo.dart';
 
 // Hive (voor thema)
+import 'package:household_rpg/core/utils.dart';
 import 'package:household_rpg/data/local/hive_boxes.dart';
 
 /// ---------------------------------------------------------------------------
@@ -86,6 +87,25 @@ final sessionBootstrapProvider = FutureProvider<void>((ref) async {
       ? authUser.displayName!.trim()
       : (authUser.email?.split('@').first ?? 'Player');
   await ref.read(fsUserRepoProvider).ensureUserDoc(authUser.uid, defaultName: fallbackName);
+});
+
+/// Controleert bij het opstarten of de week-reset nodig is.
+/// Als me.lastReset vóór de huidige maandag ligt, reset alle guild-leden:
+/// weeklyPoints=0, crown=false voor iedereen behalve de winnaar (crown=true).
+final weeklyResetProvider = FutureProvider<void>((ref) async {
+  await ref.watch(sessionBootstrapProvider.future);
+
+  final me = await ref.watch(currentUserProvider.future);
+  if (me == null || me.guildId == null) return;
+
+  final mondayStart = startOfIsoWeek(DateTime.now());
+  final needsReset = me.lastReset == null || me.lastReset!.isBefore(mondayStart);
+  if (!needsReset) return;
+
+  await ref.read(fsUserRepoProvider).resetGuildWeek(
+    guildId: me.guildId!,
+    mondayStart: mondayStart,
+  );
 });
 
 final petRepoProvider = Provider<PetRepository>((ref) {

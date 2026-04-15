@@ -385,6 +385,32 @@ class UserRepository {
     });
   }
 
+  /// Reset de volledige guild-week: weeklyPoints=0 voor alle leden,
+  /// crown=true voor het lid met de meeste punten (indien > 0).
+  Future<void> resetGuildWeek({
+    required String guildId,
+    required DateTime mondayStart,
+  }) async {
+    final members = await getUsersByGuild(guildId);
+    if (members.isEmpty) return;
+
+    final sorted = [...members]
+      ..sort((a, b) => b.weeklyPoints.compareTo(a.weeklyPoints));
+    final winner = sorted.first;
+    final anyPoints = winner.weeklyPoints > 0;
+
+    final batch = _db.batch();
+    for (final member in members) {
+      batch.update(userRef(member.id), {
+        'weeklyPoints': 0,
+        'crown': anyPoints && member.id == winner.id,
+        'lastReset': mondayStart.toIso8601String(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit();
+  }
+
   // ---- Guild --------------------------------------------------------------
   String _randomInviteCode({int len = 6}) {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
