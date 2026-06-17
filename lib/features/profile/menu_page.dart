@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:household_rpg/app/session_providers.dart';
 import 'package:household_rpg/data/models/models.dart';
-import 'package:household_rpg/features/profile/couple_qr.dart';
 
 class MenuPage extends ConsumerWidget {
   const MenuPage({super.key});
@@ -390,11 +389,6 @@ class _InviteRow extends StatelessWidget {
             }
           },
           icon: const Icon(Icons.copy),
-        ),
-        TextButton.icon(
-          onPressed: () => showCoupleQrDialog(context, invite),
-          icon: const Icon(Icons.qr_code_2),
-          label: const Text('Toon QR'),
         ),
       ],
     );
