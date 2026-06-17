@@ -6,7 +6,7 @@ Guidelines for AI assistants working on this codebase. Read this before making c
 
 ## Project Overview
 
-**Household RPG** is a Flutter-based cooperative mobile app where household members complete real-world tasks, gain skill XP, earn coins, and collaborate on quests. It targets Android, iOS, macOS, Linux, Windows, and Web.
+**Household RPG** is a Flutter-based cooperative mobile app where household members complete real-world tasks, gain skill XP, and earn coins. It targets Android, iOS, macOS, Linux, Windows, and Web.
 
 - **Package name:** `household_rpg`
 - **Dart SDK:** >=3.1.0
@@ -43,23 +43,17 @@ lib/
   core/
     env.dart                     # Environment config
     utils.dart                   # Date/math utilities
-  config/
-    furniture.dart               # Furniture config for pet room
   data/
-    models/                      # Immutable domain models (16 files)
-    repositories/                # Firestore + Hive abstractions (11 files)
+    models/                      # Immutable domain models
+    repositories/                # Firestore + Hive abstractions
     local/
       hive_boxes.dart            # Hive box declarations + openAppBoxes()
       hive_adapters.dart
   features/                      # Feature modules (page + state + ui)
     tasks/
-    quest/
     shop/
     profile/
-    pet/                         # Flame 2D game for the pet room
     skills/
-    event/
-    raid/
     loot/
     leaderboard/
   scoring/
@@ -73,8 +67,8 @@ lib/
 
 All providers live in `lib/app/session_providers.dart`. Key patterns:
 
-- `StreamProvider` — real-time Firestore listeners (users, quests, inventory)
-- `StateNotifierProvider` — interactive state (`QuestController`, `ThemeController`)
+- `StreamProvider` — real-time Firestore listeners (users, tasks, inventory)
+- `NotifierProvider` — interactive state (`ThemeController`)
 - `FutureProvider` — one-off async fetches (skill node versions)
 - `.family` modifier — parameterized providers (e.g., per skill type)
 
@@ -89,14 +83,14 @@ users/{uid}
   purchases/        (PurchaseEntry)
 guilds/{guildId}
   members/{uid}
-  quests/{questId}
+  tasks/{taskId}
     completions/{uid}
 skillNodes/         (versioned skill tree)
 shopItems/          (guild-specific shop)
 ```
 
 **Hive local boxes** (opened via `openAppBoxes()` in `main.dart`):
-`users`, `tasks`, `shop`, `events`, `raid`, `completions`, `app`
+`users`, `tasks`, `shop`, `completions`, `app`
 
 Theme state (`theme_mode`, `theme_seed`) persists in the `app` Hive box.
 
@@ -108,14 +102,13 @@ Theme state (`theme_mode`, `theme_seed`) persists in the `app` Hive box.
 
 | Context | Convention | Example |
 |---------|-----------|---------|
-| Classes | PascalCase | `UserProfile`, `QuestController` |
+| Classes | PascalCase | `UserProfile`, `ThemeController` |
 | Files (models) | PascalCase with underscore | `User_profile.dart`, `Shop_Item.dart` |
 | Files (repos/pages) | snake_case | `user_repo.dart`, `tasks_page.dart` |
 | Variables/methods | camelCase | `watchUsersByGuild`, `completeDaily` |
 
-Note: Two existing typos to be aware of — do NOT fix them without updating all references:
+Note: An existing typo to be aware of — do NOT fix it without updating all references:
 - `scoring_enginge.dart` (not "engine")
-- `features/quest/ui/proress_bar.dart` (not "progress")
 
 ### Models
 
@@ -127,7 +120,6 @@ All domain models follow these patterns:
 
 ### Error Handling
 
-- Use `QuestCooldownException` for domain-specific quest errors
 - No silent failures — surface errors via `AsyncValue` in Riverpod or log them
 - Do not use bare `try/catch` that swallows exceptions without logging
 
@@ -154,8 +146,6 @@ All domain models follow these patterns:
 | `cloud_firestore ^5.6.12` | Cloud database + real-time listeners |
 | `firebase_auth ^5.7.0` | Auth (anonymous, Google, Apple) |
 | `hive ^2.2.3` + `hive_flutter ^1.1.0` | Local storage |
-| `flame ^1.15.0` | 2D game engine (pet room) |
-| `flame_audio ^2.1.8` | Audio for pet game |
 | `equatable ^2.0.7` | Value equality for models |
 | `intl ^0.20.2` | Date formatting + i18n |
 
@@ -172,10 +162,8 @@ All domain models follow these patterns:
 ## Domain Concepts
 
 - **SkillType** (enum): `cooking`, `cleaning`, `fixing`, `laundry`, `admin`, `organization`, `wellbeing`
-- **QuestType** (enum): `daily`, `coop`
-- **Quest cooldowns**: After completing a daily quest, `cooldownUntil` is set; the `QuestCooldownException` guards re-completion
 - **Weekly points**: Reset on a schedule; tracked separately from total XP
-- **Scoring**: `ScoringEngine` in `lib/scoring/scoring_enginge.dart` applies streak/skill/event multipliers to base task points
+- **Scoring**: `ScoringEngine` in `lib/scoring/scoring_enginge.dart` applies streak/skill multipliers to base task points
 
 ---
 
@@ -205,4 +193,4 @@ The test suite is minimal (`test/widget_test.dart` is mostly template). When add
 - Do not hardcode colors or font sizes — use the theme system
 - Do not split providers out of `session_providers.dart` without good reason
 - Do not use Material 2 widgets or `ThemeData` patterns
-- Do not fix the two known filename typos (`enginge`, `proress`) without updating all imports
+- Do not fix the known filename typo (`enginge`) without updating all imports
