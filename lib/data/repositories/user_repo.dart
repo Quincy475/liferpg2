@@ -410,18 +410,10 @@ class UserRepository {
       final userData = userSnap.data() ?? <String, dynamic>{};
       final guildId = userData['guildId'] as String?;
       if (guildId == null) {
-        throw StateError('Je zit niet in een guild.');
+        throw StateError('Je zit niet in een koppel.');
       }
 
-      final memberSnap = await tx.get(memberRef(guildId, uid));
-      final role = memberSnap.data()?['role'] as String? ?? 'member';
-      if (role == 'owner') {
-        final owners = await membersCol(guildId).where('role', isEqualTo: 'owner').get();
-        if (owners.docs.length <= 1) {
-          throw StateError('Je bent de enige owner. Draag eerst ownership over.');
-        }
-      }
-
+      // Duo: beide partners zijn gelijk; je mag altijd ontkoppelen.
       tx.set(
           uRef,
           {
