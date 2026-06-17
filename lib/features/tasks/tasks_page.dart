@@ -104,6 +104,11 @@ class _TasksPageState extends ConsumerState<TasksPage> {
               return Column(
                 children: [
                   EnterMotion(delayMs: 20, child: _headerControls()),
+                  _CoopQuestsPanel(
+                    guildId: me.guildId!,
+                    weekStart: _weekStart,
+                    weekEnd: _weekEnd,
+                  ),
                   Expanded(
                     child: instancesAsync.when(
                       loading: () => const Center(child: CircularProgressIndicator()),
@@ -913,6 +918,16 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
     int dueHour = existing?.dueHour ?? 22;
     DateTime scheduledDate = existing?.scheduledDate ?? DateTime.now();
 
+    // Coöp-quest (taakgroep) + skill
+    final groups = await ref.read(taskMvpRepoProvider).watchGroups(me.guildId!).first;
+    String existingGroupName = '';
+    if (existing?.groupId != null) {
+      final g = groups.where((g) => g.id == existing!.groupId).toList();
+      if (g.isNotEmpty) existingGroupName = g.first.title;
+    }
+    final groupC = TextEditingController(text: existingGroupName);
+    SkillType? selectedSkill = existing?.skillType;
+
     const scheduleLabels = {
       TaskScheduleType.daily: 'Dagelijks',
       TaskScheduleType.weekly: 'Wekelijks',
@@ -937,6 +952,26 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
                   controller: coinC,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(labelText: 'Coins'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: groupC,
+                  decoration: const InputDecoration(
+                    labelText: 'Coöp-quest (optioneel)',
+                    helperText: 'Subtaken met dezelfde naam horen bij één grote klus',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<SkillType?>(
+                  value: selectedSkill,
+                  decoration: const InputDecoration(labelText: 'Skill (optioneel)'),
+                  items: [
+                    const DropdownMenuItem<SkillType?>(value: null, child: Text('Geen')),
+                    ...SkillType.values.map(
+                      (s) => DropdownMenuItem<SkillType?>(value: s, child: Text(s.name)),
+                    ),
+                  ],
+                  onChanged: (v) => setS(() => selectedSkill = v),
                 ),
                 const SizedBox(height: 12),
                 SwitchListTile(
@@ -1037,6 +1072,22 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
       return;
     }
 
+    // Coöp-quest oplossen: bestaande groep op naam hergebruiken, anders aanmaken.
+    String? resolvedGroupId;
+    final gname = groupC.text.trim();
+    if (gname.isNotEmpty) {
+      final match = groups.where((g) => g.title.toLowerCase() == gname.toLowerCase()).toList();
+      if (match.isNotEmpty) {
+        resolvedGroupId = match.first.id;
+      } else {
+        resolvedGroupId = await ref.read(taskMvpRepoProvider).createGroup(
+              guildId: me.guildId!,
+              input: TaskGroup(id: '', title: gname, skillType: selectedSkill, bonusCoins: 0),
+              actorUserId: me.id,
+            );
+      }
+    }
+
     final input = TaskTemplate(
       id: existing?.id ?? '',
       title: titleC.text.trim(),
@@ -1050,6 +1101,8 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
       carryOverPolicy: 'double_next_success',
       dueHour: dueHour,
       scheduledDate: isOneTime ? scheduledDate : null,
+      skillType: selectedSkill,
+      groupId: resolvedGroupId,
     );
 
     if (existing == null) {
@@ -1097,6 +1150,180 @@ final _weekInstancesProvider = StreamProvider.autoDispose.family<List<TaskInstan
         weekEnd: arg.end,
       );
 });
+
+final _coopGroupsProvider =
+    StreamProvider.autoDispose.family<List<TaskGroup>, String>((ref, gid) {
+  return ref.read(taskMvpRepoProvider).watchGroups(gid);
+});
+
+/// Paneel met de coöp-quests (taakgroepen) en hun gezamenlijke voortgang.
+class _CoopQuestsPanel extends ConsumerWidget {
+  final String guildId;
+  final DateTime weekStart;
+  final DateTime weekEnd;
+  const _CoopQuestsPanel({
+    required this.guildId,
+    required this.weekStart,
+    required this.weekEnd,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final groups = ref.watch(_coopGroupsProvider(guildId)).value ?? const <TaskGroup>[];
+    if (groups.isEmpty) return const SizedBox.shrink();
+    final instances = ref.watch(_weekInstancesProvider((
+      guildId: guildId,
+      start: weekStart,
+      end: weekEnd,
+    ))).value ?? const <TaskInstance>[];
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Coöp-quests samen', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 6),
+          for (final g in groups)
+            _CoopGroupCard(
+              group: g,
+              instances: instances.where((i) => i.groupId == g.id).toList(),
+              onDelete: () => _deleteGroup(context, ref, g),
+              onEdit: () => _editGroup(context, ref, g),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteGroup(BuildContext context, WidgetRef ref, TaskGroup g) async {
+    final me = ref.read(currentUserProvider).value;
+    if (me == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Coöp-quest verwijderen'),
+        content: Text('"${g.title}" en de bijbehorende subtaken verwijderen?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuleer')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Verwijder')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await ref
+        .read(taskMvpRepoProvider)
+        .deleteGroup(guildId: guildId, groupId: g.id, actorUserId: me.id);
+    ref.invalidate(_weekInstancesProvider);
+  }
+
+  Future<void> _editGroup(BuildContext context, WidgetRef ref, TaskGroup g) async {
+    final me = ref.read(currentUserProvider).value;
+    if (me == null) return;
+    final titleC = TextEditingController(text: g.title);
+    final bonusC = TextEditingController(text: g.bonusCoins.toString());
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Coöp-quest bewerken'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: titleC, decoration: const InputDecoration(labelText: 'Naam')),
+            const SizedBox(height: 10),
+            TextField(
+              controller: bonusC,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Bonus-coins bij samen afronden'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuleer')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Opslaan')),
+        ],
+      ),
+    );
+    if (ok != true || titleC.text.trim().isEmpty) return;
+    await ref.read(taskMvpRepoProvider).updateGroup(
+          guildId: guildId,
+          input: TaskGroup(
+            id: g.id,
+            title: titleC.text.trim(),
+            description: g.description,
+            skillType: g.skillType,
+            bonusCoins: int.tryParse(bonusC.text.trim()) ?? 0,
+          ),
+          actorUserId: me.id,
+        );
+  }
+}
+
+class _CoopGroupCard extends StatelessWidget {
+  final TaskGroup group;
+  final List<TaskInstance> instances;
+  final VoidCallback onDelete;
+  final VoidCallback onEdit;
+  const _CoopGroupCard({
+    required this.group,
+    required this.instances,
+    required this.onDelete,
+    required this.onEdit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final total = instances.length;
+    final done = instances
+        .where((i) => i.status == TaskInstanceStatus.completed)
+        .length;
+    final progress = total == 0 ? 0.0 : done / total;
+    final complete = total > 0 && done == total;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    complete ? '🎉 ${group.title}' : group.title,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  onSelected: (v) => v == 'delete' ? onDelete() : onEdit(),
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'edit', child: Text('Bewerken')),
+                    PopupMenuItem(value: 'delete', child: Text('Verwijderen')),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: LinearProgressIndicator(
+                value: total == 0 ? 0 : progress,
+                minHeight: 8,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              complete
+                  ? 'Samen afgerond! ($done/$total subtaken)'
+                  : '$done/$total subtaken klaar deze week',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _BoardList extends StatelessWidget {
   final List<TaskInstance> instances;
