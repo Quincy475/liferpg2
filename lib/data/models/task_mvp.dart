@@ -22,6 +22,9 @@ class TaskTemplate {
   final DateTime? scheduledDate;
   final SkillType? skillType;
 
+  /// Coöp-quest groepering: taken met dezelfde groupId horen bij één grote klus.
+  final String? groupId;
+
   const TaskTemplate({
     required this.id,
     required this.title,
@@ -38,6 +41,7 @@ class TaskTemplate {
     this.dueHour = 22,
     this.scheduledDate,
     this.skillType,
+    this.groupId,
   });
 
   static DateTime? _dt(dynamic v) {
@@ -75,6 +79,7 @@ class TaskTemplate {
       dueHour: ((m['dueHour'] ?? 22) as num).toInt(),
       scheduledDate: _dt(m['scheduledDate']),
       skillType: skillType,
+      groupId: m['groupId'] as String?,
     );
   }
 
@@ -93,6 +98,7 @@ class TaskTemplate {
         'dueHour': dueHour,
         'scheduledDate': scheduledDate != null ? Timestamp.fromDate(scheduledDate!) : null,
         'skillTypeIndex': skillType?.index,
+        'groupId': groupId,
         'updatedAt': FieldValue.serverTimestamp(),
       };
 }
@@ -112,6 +118,7 @@ class TaskInstance {
   final String? bonusReason;
   final String title;
   final String description;
+  final String? groupId;
 
   const TaskInstance({
     required this.id,
@@ -128,6 +135,7 @@ class TaskInstance {
     this.completedByUserId,
     this.completedAt,
     this.bonusReason,
+    this.groupId,
   });
 
   static DateTime _dt(dynamic v) {
@@ -158,6 +166,7 @@ class TaskInstance {
       bonusReason: m['bonusReason'] as String?,
       title: (m['title'] ?? '') as String,
       description: (m['description'] ?? '') as String,
+      groupId: m['groupId'] as String?,
     );
   }
 }
@@ -198,4 +207,44 @@ class TaskEvent {
       payload: Map<String, dynamic>.from(m['payload'] ?? const {}),
     );
   }
+}
+
+/// Een coöp-quest: een grote klus (bv. "Huis vegen") die uit meerdere subtaken
+/// (TaskTemplates met dezelfde groupId) bestaat.
+class TaskGroup {
+  final String id;
+  final String title;
+  final String description;
+  final SkillType? skillType;
+  final int bonusCoins;
+
+  const TaskGroup({
+    required this.id,
+    required this.title,
+    this.description = '',
+    this.skillType,
+    this.bonusCoins = 0,
+  });
+
+  static TaskGroup fromMap(String id, Map<String, dynamic> m) {
+    final skillIdx = m['skillTypeIndex'] as int?;
+    final skillType = (skillIdx != null && skillIdx >= 0 && skillIdx < SkillType.values.length)
+        ? SkillType.values[skillIdx]
+        : null;
+    return TaskGroup(
+      id: id,
+      title: (m['title'] ?? '') as String,
+      description: (m['description'] ?? '') as String,
+      skillType: skillType,
+      bonusCoins: ((m['bonusCoins'] ?? 0) as num).toInt(),
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+        'title': title,
+        'description': description,
+        'skillTypeIndex': skillType?.index,
+        'bonusCoins': bonusCoins,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
 }

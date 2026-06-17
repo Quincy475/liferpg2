@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:household_rpg/data/models/models.dart';
+import 'package:household_rpg/scoring/scoring_enginge.dart' show kXpPerCoin;
 
 final taskMvpRepoProvider = Provider<TaskMvpRepository>((ref) {
   return TaskMvpRepository(FirebaseFirestore.instance);
@@ -19,7 +20,74 @@ class TaskMvpRepository {
   CollectionReference<Map<String, dynamic>> _events(String guildId) =>
       _db.collection('guilds').doc(guildId).collection('taskEvents');
 
+  CollectionReference<Map<String, dynamic>> _groups(String guildId) =>
+      _db.collection('guilds').doc(guildId).collection('taskGroups');
+
   DocumentReference<Map<String, dynamic>> _user(String uid) => _db.collection('users').doc(uid);
+
+  // ---- Coöp-quests (taakgroepen) -----------------------------------------
+  Stream<List<TaskGroup>> watchGroups(String guildId) {
+    return _groups(guildId)
+        .orderBy('title')
+        .snapshots()
+        .map((s) => s.docs.map((d) => TaskGroup.fromMap(d.id, d.data())).toList());
+  }
+
+  Future<String> createGroup({
+    required String guildId,
+    required TaskGroup input,
+    required String actorUserId,
+  }) async {
+    final ref = _groups(guildId).doc();
+    await ref.set({
+      ...input.toMap(),
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    await _logEvent(
+      guildId: guildId,
+      actorUserId: actorUserId,
+      type: 'created_group',
+      payload: {'title': input.title},
+    );
+    return ref.id;
+  }
+
+  Future<void> updateGroup({
+    required String guildId,
+    required TaskGroup input,
+    required String actorUserId,
+  }) async {
+    await _groups(guildId).doc(input.id).set(input.toMap(), SetOptions(merge: true));
+    await _logEvent(
+      guildId: guildId,
+      actorUserId: actorUserId,
+      type: 'updated_group',
+      payload: {'title': input.title},
+    );
+  }
+
+  /// Verwijder een coöp-quest: archiveer de subtaak-templates, ruim open
+  /// instances op en verwijder het groep-doc.
+  Future<void> deleteGroup({
+    required String guildId,
+    required String groupId,
+    required String actorUserId,
+  }) async {
+    final templates = await _templates(guildId).where('groupId', isEqualTo: groupId).get();
+    for (final doc in templates.docs) {
+      await removeOpenInstancesForTemplate(guildId: guildId, templateId: doc.id);
+      await _templates(guildId).doc(doc.id).delete();
+    }
+    final snap = await _groups(guildId).doc(groupId).get();
+    final title = (snap.data()?['title'] ?? '') as String;
+    await _groups(guildId).doc(groupId).delete();
+    await _logEvent(
+      guildId: guildId,
+      actorUserId: actorUserId,
+      type: 'deleted_group',
+      payload: {'title': title},
+    );
+  }
 
   Stream<List<TaskTemplate>> watchTemplates(String guildId) {
     return _templates(guildId)
@@ -138,6 +206,8 @@ class TaskMvpRepository {
           'bonusReason': null,
           'title': t.title,
           'description': t.description,
+          'groupId': t.groupId,
+          'skillTypeIndex': t.skillType?.index,
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
@@ -260,6 +330,7 @@ class TaskMvpRepository {
     final userRef = _user(userId);
     String instanceTitle = '';
     int coinsTotal = 0;
+    String? groupId;
 
     await _db.runTransaction((tx) async {
       final snap = await tx.get(ref);
@@ -275,6 +346,11 @@ class TaskMvpRepository {
       final total = base + bonus;
       instanceTitle = (m['title'] ?? '') as String;
       coinsTotal = total;
+      groupId = m['groupId'] as String?;
+
+      // Skill-XP proportioneel met de uitgekeerde coins (subtaken variëren in omvang).
+      final skillIdx = m['skillTypeIndex'] as int?;
+      final xp = (total * kXpPerCoin).round();
 
       tx.set(
           ref,
@@ -293,6 +369,7 @@ class TaskMvpRepository {
           {
             'coins': FieldValue.increment(total),
             'weeklyPoints': FieldValue.increment(total),
+            if (skillIdx != null && xp > 0) 'skillXp.$skillIdx': FieldValue.increment(xp),
             'updatedAt': FieldValue.serverTimestamp(),
           },
           SetOptions(merge: true));
@@ -304,6 +381,56 @@ class TaskMvpRepository {
       type: 'completed',
       instanceId: instanceId,
       payload: {'title': instanceTitle, 'coins': coinsTotal},
+    );
+
+    // Coöp-quest afgerond? Keer dan de gezamenlijke bonus uit.
+    final gid = groupId;
+    if (gid != null && gid.isNotEmpty) {
+      await _maybeAwardGroupBonus(guildId: guildId, groupId: gid);
+    }
+  }
+
+  /// Keert de gezamenlijke bonus uit zodra alle (huidige) instances van een groep
+  /// voltooid zijn. Idempotent via `bonusPaidForGroups` op het user-doc.
+  Future<void> _maybeAwardGroupBonus({
+    required String guildId,
+    required String groupId,
+  }) async {
+    final instSnap = await _instances(guildId).where('groupId', isEqualTo: groupId).get();
+    if (instSnap.docs.isEmpty) return;
+
+    // Alleen niet-gemiste/verlopen instances tellen mee voor "klaar".
+    final relevant = instSnap.docs.where((d) {
+      final s = (d.data()['status'] ?? 'open').toString();
+      return s != 'missed' && s != 'expired';
+    }).toList();
+    if (relevant.isEmpty) return;
+    final allDone = relevant.every((d) => (d.data()['status'] ?? '') == 'completed');
+    if (!allDone) return;
+
+    final groupSnap = await _groups(guildId).doc(groupId).get();
+    final bonus = ((groupSnap.data()?['bonusCoins'] ?? 0) as num).toInt();
+    final title = (groupSnap.data()?['title'] ?? '') as String;
+
+    final members = await _db.collection('users').where('guildId', isEqualTo: guildId).get();
+    final periodKey = '${groupId}_${relevant.length}'; // wisselt als de groep groeit/krimpt
+
+    for (final mdoc in members.docs) {
+      final paid = List<String>.from(mdoc.data()['bonusPaidForGroups'] ?? const []);
+      if (paid.contains(periodKey)) continue;
+      await mdoc.reference.set({
+        if (bonus > 0) 'coins': FieldValue.increment(bonus),
+        if (bonus > 0) 'weeklyPoints': FieldValue.increment(bonus),
+        'bonusPaidForGroups': FieldValue.arrayUnion([periodKey]),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    }
+
+    await _logEvent(
+      guildId: guildId,
+      actorUserId: 'system',
+      type: 'group_completed',
+      payload: {'title': title, 'coins': bonus},
     );
   }
 
