@@ -369,7 +369,10 @@ class TaskMvpRepository {
           {
             'coins': FieldValue.increment(total),
             'weeklyPoints': FieldValue.increment(total),
-            if (skillIdx != null && xp > 0) 'skillXp.$skillIdx': FieldValue.increment(xp),
+            // Geneste map zodat increment ook bij set(merge:true) op de juiste
+            // skill-sleutel werkt (dotted paths gelden alleen bij update()).
+            if (skillIdx != null && xp > 0)
+              'skillXp': {'$skillIdx': FieldValue.increment(xp)},
             'updatedAt': FieldValue.serverTimestamp(),
           },
           SetOptions(merge: true));
