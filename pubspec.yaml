@@ -17,7 +17,7 @@ dependencies:
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   intl: ^0.20.2
- 
+
   # BELANGRIJK: GEEN expliciete 'collection' dependency, die veroorzaakt de pin-conflict met flutter_test
 
 dev_dependencies:

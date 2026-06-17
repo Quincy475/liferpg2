@@ -70,6 +70,22 @@ final authStateProvider = StreamProvider<User?>(
   (ref) => ref.read(firebaseAuthProvider).authStateChanges(),
 );
 
+/// Zorgt dat er altijd een sessie is: is er geen user, maak dan direct een
+/// anoniem account aan. Geen inlogscherm meer nodig bij eerste start.
+final ensureSignedInProvider = FutureProvider<void>((ref) async {
+  final authUser = await ref.watch(authStateProvider.future);
+  if (authUser == null) {
+    await ref.read(authRepoProvider).signInAnonymously();
+    // authStateChanges emit een nieuwe user; deze provider draait dan opnieuw.
+  }
+});
+
+/// True als de huidige sessie anoniem is (nog geen e-mail gekoppeld).
+final isFirebaseAnonymousProvider = Provider<bool>((ref) {
+  final u = ref.watch(authStateProvider).value;
+  return u?.isAnonymous ?? false;
+});
+
 /// Bootstrap auth gekoppeld profiel: alleen bij ingelogde user user-doc syncen.
 final sessionBootstrapProvider = FutureProvider<void>((ref) async {
   final authUser = await ref.watch(authStateProvider.future);
@@ -97,6 +113,18 @@ final currentUserProvider = StreamProvider<UserProfile?>((ref) {
   return Stream.fromFuture(ref.read(fsUserRepoProvider).ensureUserDoc(uid)).asyncExpand(
     (_) => ref.read(fsUserRepoProvider).watchUser(uid),
   );
+});
+
+/// De partner in het duo: de andere user binnen hetzelfde koppel (guild).
+/// Levert null als je solo bent (nog niet gekoppeld) of de partner nog laadt.
+final partnerProvider = Provider<UserProfile?>((ref) {
+  final me = ref.watch(currentUserProvider).value;
+  if (me == null) return null;
+  final users = ref.watch(usersInMyGuildProvider).value ?? const <UserProfile>[];
+  for (final u in users) {
+    if (u.id != me.id) return u;
+  }
+  return null;
 });
 
 final fsSkillTreeRepoProvider = Provider<SkillTreeRepository>(
@@ -145,10 +173,13 @@ class ThemeController extends Notifier<ThemeState> {
   static const _kMode = 'theme_mode'; // 'system'|'light'|'dark'
   static const _kSeed = 'theme_seed'; // int color value
 
+  // Warme, knusse standaardkleur (terracotta) — past bij de duo/"samen"-sfeer.
+  static const _defaultSeed = 0xFFE07A5F;
+
   @override
   ThemeState build() {
     final modeStr = (appBox.get(_kMode) as String?) ?? 'system';
-    final seedInt = (appBox.get(_kSeed) as int?) ?? Colors.teal.value;
+    final seedInt = (appBox.get(_kSeed) as int?) ?? _defaultSeed;
     return ThemeState(mode: _parseMode(modeStr), seedColor: Color(seedInt));
   }
 
@@ -172,6 +203,29 @@ class ThemeController extends Notifier<ThemeState> {
   Future<void> setSeed(Color c) async {
     state = state.copyWith(seedColor: c);
     await appBox.put(_kSeed, c.value);
+  }
+}
+
+/// ---------------------------------------------------------------------------
+/// Onboarding (eenmalig koppel-/welkomscherm), persist in Hive `app`-box
+/// ---------------------------------------------------------------------------
+final onboardingDoneProvider =
+    NotifierProvider<OnboardingController, bool>(OnboardingController.new);
+
+class OnboardingController extends Notifier<bool> {
+  static const _kKey = 'onboarding_done';
+
+  @override
+  bool build() => (appBox.get(_kKey) as bool?) ?? false;
+
+  Future<void> complete() async {
+    state = true;
+    await appBox.put(_kKey, true);
+  }
+
+  Future<void> reset() async {
+    state = false;
+    await appBox.put(_kKey, false);
   }
 }
 

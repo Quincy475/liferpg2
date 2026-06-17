@@ -370,18 +370,22 @@ class _GuildLeaderboard extends ConsumerWidget {
           loading: () => const CircularProgressIndicator(),
           error: (e, _) => Text('Error: $e'),
           data: (users) {
-            final sorted = [...users]..sort((a, b) => b.weeklyPoints.compareTo(a.weeklyPoints));
+            final together =
+                users.fold<int>(0, (sum, u) => sum + u.weeklyPoints);
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Weekly group ranking', style: Theme.of(context).textTheme.titleMedium),
+                Text('Samen deze week', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 4),
+                Text('$together punten samen',
+                    style: Theme.of(context).textTheme.bodyMedium),
                 const SizedBox(height: 8),
-                for (var i = 0; i < sorted.length; i++)
+                for (final u in users)
                   ListTile(
                     dense: true,
-                    title: Text(sorted[i].name),
-                    trailing: Text('${sorted[i].weeklyPoints}'),
-                    leading: Text('#${i + 1}'),
+                    leading: const Icon(Icons.favorite, size: 18),
+                    title: Text(u.name),
+                    trailing: Text('${u.weeklyPoints} pt'),
                   ),
               ],
             );
@@ -399,6 +403,7 @@ class _ActivityCard extends ConsumerWidget {
   static const _showTypes = {
     'completed',
     'purchased_item',
+    'group_completed',
     // 'claimed',
     // 'unclaimed',
     // 'claimed_all_future',
@@ -423,11 +428,11 @@ class _ActivityCard extends ConsumerWidget {
             final users = usersAsync.value ?? const <UserProfile>[];
             final nameById = <String, String>{for (final u in users) u.id: u.name};
             final filtered = events.where((e) => _showTypes.contains(e.type)).toList();
-            if (filtered.isEmpty) return const Text('Nog geen guild activity.');
+            if (filtered.isEmpty) return const Text('Nog geen activiteit samen.');
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Guild activity', style: Theme.of(context).textTheme.titleMedium),
+                Text('Jullie activiteit', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
                 SizedBox(
                   height: 260,
@@ -477,6 +482,8 @@ class _ActivityCard extends ConsumerWidget {
         return '"$title" is gemist';
       case 'purchased_item':
         return '$actor kocht "$title" voor $coins 🪙';
+      case 'group_completed':
+        return 'Coöp-quest "$title" samen afgerond! +$coins 🪙 voor allebei';
       default:
         return '$actor: ${e.type}';
     }
@@ -493,6 +500,7 @@ class _ActivityCard extends ConsumerWidget {
     'deleted_template'     => '🗑️',
     'missed'               => '⚠️',
     'purchased_item'       => '🛍️',
+    'group_completed'      => '🎉',
     _                      => '📝',
   };
 }

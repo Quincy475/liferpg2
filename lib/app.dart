@@ -43,10 +43,24 @@ class _HomeShellState extends ConsumerState<_HomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(sessionBootstrapProvider);
-    final isSignedOut = ref.watch(isAnonymousSessionProvider);
-    if (isSignedOut) {
-      return const AuthGatePage(key: ValueKey('auth-gate-page'));
+    // Zorgt dat er altijd (anoniem) ingelogd is — geen inlogscherm meer.
+    final signIn = ref.watch(ensureSignedInProvider);
+    final boot = ref.watch(sessionBootstrapProvider);
+    final uid = ref.watch(currentUserIdProvider);
+
+    if (signIn.hasError) {
+      return _SplashScaffold(error: signIn.error.toString());
+    }
+
+    // Bezig met aanmaken sessie / user-doc → korte splash.
+    if (uid == null || signIn.isLoading || boot.isLoading) {
+      return const _SplashScaffold();
+    }
+
+    // Eenmalig welkom-/koppelscherm.
+    final onboarded = ref.watch(onboardingDoneProvider);
+    if (!onboarded) {
+      return const OnboardingPage(key: ValueKey('onboarding-page'));
     }
 
     return Scaffold(
@@ -63,5 +77,31 @@ class _HomeShellState extends ConsumerState<_HomeShell> {
       ),
     );
   }
+}
 
+class _SplashScaffold extends StatelessWidget {
+  final String? error;
+  const _SplashScaffold({this.error});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: error == null
+            ? const CircularProgressIndicator()
+            : Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.wifi_off, size: 40),
+                    const SizedBox(height: 12),
+                    Text('Kon geen sessie starten:\n$error',
+                        textAlign: TextAlign.center),
+                  ],
+                ),
+              ),
+      ),
+    );
+  }
 }

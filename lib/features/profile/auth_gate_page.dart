@@ -1,39 +1,30 @@
-import 'dart:math';
-
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:household_rpg/app/session_providers.dart';
 import 'package:household_rpg/theme/app_theme.dart';
 
-class AuthGatePage extends ConsumerStatefulWidget {
-  const AuthGatePage({super.key});
+/// Eenmalig welkom-/koppelscherm. Er is altijd al (anoniem) ingelogd, dus dit
+/// gaat niet over "inloggen" maar over je naam kiezen en evt. koppelen aan je partner.
+class OnboardingPage extends ConsumerStatefulWidget {
+  const OnboardingPage({super.key});
 
   @override
-  ConsumerState<AuthGatePage> createState() => _AuthGatePageState();
+  ConsumerState<OnboardingPage> createState() => _OnboardingPageState();
 }
 
-class _AuthGatePageState extends ConsumerState<AuthGatePage>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController = TabController(length: 2, vsync: this);
-  final _loginEmail = TextEditingController();
-  final _loginPassword = TextEditingController();
-  final _registerName = TextEditingController();
-  final _registerEmail = TextEditingController();
-  final _registerPassword = TextEditingController();
+class _OnboardingPageState extends ConsumerState<OnboardingPage> {
+  final _name = TextEditingController();
   bool _busy = false;
+  bool _showLogin = false;
 
   @override
   void dispose() {
-    _tabController.dispose();
-    _loginEmail.dispose();
-    _loginPassword.dispose();
-    _registerName.dispose();
-    _registerEmail.dispose();
-    _registerPassword.dispose();
+    _name.dispose();
     super.dispose();
   }
+
+  String? get _uid => ref.read(currentUserIdProvider);
 
   @override
   Widget build(BuildContext context) {
@@ -42,8 +33,8 @@ class _AuthGatePageState extends ConsumerState<AuthGatePage>
         child: SafeArea(
           child: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 620),
-              child: Padding(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.all(20),
                 child: Card(
                   child: Padding(
@@ -52,32 +43,54 @@ class _AuthGatePageState extends ConsumerState<AuthGatePage>
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Welkom terug', style: Theme.of(context).textTheme.headlineSmall),
+                        Text('Welkom 👋',
+                            style: Theme.of(context).textTheme.headlineSmall),
                         const SizedBox(height: 8),
                         const Text(
-                          'Log in met e-mail en wachtwoord. Je account bewaart je voortgang, guild en shop data.',
+                          'Doe taken samen, verzamel coins en groei samen. '
+                          'Kies een naam en koppel daarna met je partner.',
                         ),
                         const SizedBox(height: 16),
-                        TabBar(
-                          controller: _tabController,
-                          tabs: const [
-                            Tab(text: 'Inloggen'),
-                            Tab(text: 'Registreren'),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          height: 320,
-                          child: TabBarView(
-                            controller: _tabController,
-                            children: [
-                              _buildLoginTab(context),
-                              _buildRegisterTab(context),
-                            ],
+                        TextField(
+                          controller: _name,
+                          textCapitalization: TextCapitalization.words,
+                          decoration: const InputDecoration(
+                            labelText: 'Jouw naam',
+                            prefixIcon: Icon(Icons.person_outline),
                           ),
                         ),
+                        const SizedBox(height: 18),
+                        FilledButton.icon(
+                          onPressed: _busy ? null : _createCouple,
+                          icon: const Icon(Icons.favorite_outline),
+                          label: const Text('Maak een koppel'),
+                        ),
                         const SizedBox(height: 8),
-                        if (_busy) const LinearProgressIndicator(),
+                        OutlinedButton.icon(
+                          onPressed: _busy ? null : _joinCouple,
+                          icon: const Icon(Icons.link),
+                          label: const Text('Koppelen met code'),
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton(
+                          onPressed: _busy ? null : _continueSolo,
+                          child: const Text('Ga solo verder'),
+                        ),
+                        const Divider(height: 28),
+                        TextButton.icon(
+                          onPressed: _busy
+                              ? null
+                              : () => setState(() => _showLogin = !_showLogin),
+                          icon: Icon(_showLogin
+                              ? Icons.expand_less
+                              : Icons.expand_more),
+                          label: const Text('Heb je al een account? Log in met e-mail'),
+                        ),
+                        if (_showLogin) _LoginForm(onBusy: _setBusy),
+                        if (_busy) ...[
+                          const SizedBox(height: 12),
+                          const LinearProgressIndicator(),
+                        ],
                       ],
                     ),
                   ),
@@ -90,154 +103,226 @@ class _AuthGatePageState extends ConsumerState<AuthGatePage>
     );
   }
 
-  Widget _buildLoginTab(BuildContext context) {
-    return ListView(
-      children: [
-        TextField(
-          controller: _loginEmail,
-          keyboardType: TextInputType.emailAddress,
-          decoration: const InputDecoration(labelText: 'E-mail'),
+  void _setBusy(bool v) {
+    if (mounted) setState(() => _busy = v);
+  }
+
+  Future<bool> _saveName() async {
+    final uid = _uid;
+    final name = _name.text.trim();
+    if (uid == null) {
+      _notify('Geen sessie. Probeer opnieuw.');
+      return false;
+    }
+    if (name.isEmpty) {
+      _notify('Vul eerst je naam in.');
+      return false;
+    }
+    await ref.read(fsUserRepoProvider).updateName(uid, name);
+    try {
+      await ref.read(authRepoProvider).updateDisplayName(name: name);
+    } catch (_) {
+      // displayName is best-effort; user-doc is leidend.
+    }
+    return true;
+  }
+
+  Future<void> _continueSolo() async {
+    setState(() => _busy = true);
+    try {
+      if (!await _saveName()) return;
+      await ref.read(onboardingDoneProvider.notifier).complete();
+    } catch (e) {
+      _notify('Mislukt: $e');
+    } finally {
+      _setBusy(false);
+    }
+  }
+
+  Future<void> _createCouple() async {
+    setState(() => _busy = true);
+    try {
+      if (!await _saveName()) return;
+      final coupleName = await _askText(
+        title: 'Naam van jullie koppel',
+        label: 'Bijv. "Ons huishouden"',
+        initial: 'Ons huishouden',
+      );
+      if (coupleName == null || coupleName.trim().isEmpty) return;
+
+      final uid = _uid!;
+      final gid = await ref
+          .read(fsUserRepoProvider)
+          .createGuildAndJoin(ownerUid: uid, name: coupleName.trim());
+      await ref.read(shopRepoProvider).seedGuildShop(guildId: gid);
+
+      final invite = (await ref.read(fsUserRepoProvider).getGuild(gid))?['inviteCode']
+          as String?;
+      if (mounted && invite != null) {
+        await _showInviteDialog(invite);
+      }
+      await ref.read(onboardingDoneProvider.notifier).complete();
+    } catch (e) {
+      _notify('Koppel maken mislukt: $e');
+    } finally {
+      _setBusy(false);
+    }
+  }
+
+  Future<void> _joinCouple() async {
+    setState(() => _busy = true);
+    try {
+      if (!await _saveName()) return;
+      final code = await _askText(
+        title: 'Koppelen met code',
+        label: 'Koppelcode',
+      );
+      if (code == null || code.trim().isEmpty) return;
+
+      await ref.read(fsUserRepoProvider).joinByInviteCode(
+            uid: _uid!,
+            inviteCode: code.trim().toUpperCase(),
+          );
+      await ref.read(onboardingDoneProvider.notifier).complete();
+      _notify('Gekoppeld! 🎉');
+    } catch (e) {
+      _notify('Koppelen mislukt: $e');
+    } finally {
+      _setBusy(false);
+    }
+  }
+
+  Future<void> _showInviteDialog(String invite) async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Jullie koppelcode'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Deel deze code met je partner om te koppelen:'),
+            const SizedBox(height: 12),
+            SelectableText(
+              invite,
+              style: Theme.of(ctx)
+                  .textTheme
+                  .headlineSmall
+                  ?.copyWith(letterSpacing: 4),
+            ),
+          ],
         ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _loginPassword,
-          obscureText: true,
-          decoration: const InputDecoration(labelText: 'Wachtwoord'),
-        ),
-        const SizedBox(height: 14),
-        FilledButton.icon(
-          onPressed: _busy ? null : _login,
-          icon: const Icon(Icons.login),
-          label: const Text('Inloggen'),
-        ),
-        const SizedBox(height: 8),
-        TextButton(
-          onPressed: _busy ? null : _forgotPassword,
-          child: const Text('Wachtwoord vergeten?'),
-        ),
-      ],
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Klaar'),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildRegisterTab(BuildContext context) {
-    return ListView(
-      children: [
-        TextField(
-          controller: _registerName,
-          textCapitalization: TextCapitalization.words,
-          decoration: const InputDecoration(labelText: 'Display name'),
+  Future<String?> _askText({
+    required String title,
+    required String label,
+    String initial = '',
+  }) async {
+    final controller = TextEditingController(text: initial);
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(labelText: label),
         ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _registerEmail,
-          keyboardType: TextInputType.emailAddress,
-          decoration: const InputDecoration(labelText: 'E-mail'),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _registerPassword,
-          obscureText: true,
-          decoration: const InputDecoration(labelText: 'Wachtwoord'),
-        ),
-        const SizedBox(height: 8),
-        _PasswordStrengthHint(password: _registerPassword.text),
-        const SizedBox(height: 14),
-        FilledButton.icon(
-          onPressed: _busy ? null : _register,
-          icon: const Icon(Icons.person_add_alt_1),
-          label: const Text('Account aanmaken'),
-        ),
-      ],
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Annuleer')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('Oké'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _notify(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+/// Mini-loginformulier voor wie al een account heeft (bv. tweede toestel).
+class _LoginForm extends ConsumerStatefulWidget {
+  final void Function(bool) onBusy;
+  const _LoginForm({required this.onBusy});
+
+  @override
+  ConsumerState<_LoginForm> createState() => _LoginFormState();
+}
+
+class _LoginFormState extends ConsumerState<_LoginForm> {
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        children: [
+          TextField(
+            controller: _email,
+            keyboardType: TextInputType.emailAddress,
+            decoration: const InputDecoration(labelText: 'E-mail'),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _password,
+            obscureText: true,
+            decoration: const InputDecoration(labelText: 'Wachtwoord'),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: _login,
+            icon: const Icon(Icons.login),
+            label: const Text('Inloggen'),
+          ),
+        ],
+      ),
     );
   }
 
   Future<void> _login() async {
-    final email = _loginEmail.text.trim();
-    final password = _loginPassword.text;
-    if (!_looksLikeEmail(email) || password.isEmpty) {
+    final email = _email.text.trim();
+    final password = _password.text;
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email) || password.isEmpty) {
       _notify('Vul een geldig e-mailadres en wachtwoord in.');
       return;
     }
-    setState(() => _busy = true);
+    widget.onBusy(true);
     try {
-      await ref.read(authRepoProvider).signInWithEmailAndPassword(email: email, password: password);
-      _notify('Succesvol ingelogd.');
+      await ref
+          .read(authRepoProvider)
+          .signInWithEmailAndPassword(email: email, password: password);
+      await ref.read(onboardingDoneProvider.notifier).complete();
+      _notify('Ingelogd.');
     } on FirebaseAuthException catch (e) {
       _notify(_authError(e));
     } catch (e) {
       _notify('Inloggen mislukt: $e');
     } finally {
-      if (mounted) setState(() => _busy = false);
+      widget.onBusy(false);
     }
-  }
-
-  Future<void> _register() async {
-    final name = _registerName.text.trim();
-    final email = _registerEmail.text.trim();
-    final password = _registerPassword.text;
-
-    if (name.isEmpty) {
-      _notify('Naam is verplicht.');
-      return;
-    }
-    if (!_looksLikeEmail(email)) {
-      _notify('Vul een geldig e-mailadres in.');
-      return;
-    }
-    if (password.length < 8) {
-      _notify('Wachtwoord moet minimaal 8 tekens zijn.');
-      return;
-    }
-
-    setState(() => _busy = true);
-    try {
-      final cred = await ref
-          .read(authRepoProvider)
-          .registerWithEmailAndPassword(email: email, password: password);
-      await ref.read(authRepoProvider).updateDisplayName(name: name);
-      final uid = cred.user!.uid;
-      await ref.read(fsUserRepoProvider).ensureUserDoc(uid, defaultName: name);
-      await ref.read(fsUserRepoProvider).updateName(uid, name);
-      await ref.read(fsUserRepoProvider).userRef(uid).set(
-        {
-          'email': email,
-          'authProvider': 'password',
-          'updatedAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
-      );
-      _notify('Account aangemaakt. Welkom $name!');
-    } on FirebaseAuthException catch (e) {
-      _notify(_authError(e));
-    } catch (e) {
-      _notify('Registreren mislukt: $e');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _forgotPassword() async {
-    final email = _loginEmail.text.trim();
-    if (!_looksLikeEmail(email)) {
-      _notify('Vul eerst je e-mail in bij Inloggen.');
-      return;
-    }
-
-    setState(() => _busy = true);
-    try {
-      await ref.read(authRepoProvider).sendPasswordResetEmail(email: email);
-      _notify('Reset-link verstuurd naar $email.');
-    } on FirebaseAuthException catch (e) {
-      _notify(_authError(e));
-    } catch (e) {
-      _notify('Reset versturen mislukt: $e');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  bool _looksLikeEmail(String email) {
-    return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email);
   }
 
   String _authError(FirebaseAuthException e) {
@@ -249,10 +334,6 @@ class _AuthGatePageState extends ConsumerState<AuthGatePage>
         return 'E-mail of wachtwoord klopt niet.';
       case 'invalid-email':
         return 'Ongeldig e-mailadres.';
-      case 'email-already-in-use':
-        return 'Dit e-mailadres is al in gebruik.';
-      case 'weak-password':
-        return 'Wachtwoord is te zwak.';
       case 'too-many-requests':
         return 'Te veel pogingen. Probeer later opnieuw.';
       default:
@@ -263,38 +344,5 @@ class _AuthGatePageState extends ConsumerState<AuthGatePage>
   void _notify(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-  }
-}
-
-class _PasswordStrengthHint extends StatelessWidget {
-  final String password;
-  const _PasswordStrengthHint({required this.password});
-
-  @override
-  Widget build(BuildContext context) {
-    final score = _score(password);
-    final labels = ['Zeer zwak', 'Zwak', 'Ok', 'Sterk'];
-    final colors = [Colors.red, Colors.orange, Colors.amber, Colors.green];
-    return Row(
-      children: [
-        Expanded(
-          child: LinearProgressIndicator(
-            value: score / 4,
-            color: colors[max(0, score - 1)],
-          ),
-        ),
-        const SizedBox(width: 10),
-        Text(labels[max(0, score - 1)]),
-      ],
-    );
-  }
-
-  int _score(String value) {
-    var score = 0;
-    if (value.length >= 8) score++;
-    if (RegExp(r'[A-Z]').hasMatch(value)) score++;
-    if (RegExp(r'[0-9]').hasMatch(value)) score++;
-    if (RegExp(r'[^A-Za-z0-9]').hasMatch(value)) score++;
-    return score.clamp(1, 4);
   }
 }

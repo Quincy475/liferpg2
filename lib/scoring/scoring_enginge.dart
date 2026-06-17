@@ -3,6 +3,11 @@ import 'package:household_rpg/data/models/Task.dart';
 import 'package:household_rpg/data/models/User_profile.dart';
 import 'package:household_rpg/data/models/Completion_result.dart';
 
+/// Verhouding skill-XP per uitgekeerde coin bij het voltooien van een (sub)taak.
+/// Subtaken variëren sterk in omvang, dus XP schaalt mee met de coins i.p.v. vast.
+/// Centrale plek zodat de balans op één punt te tunen is.
+const double kXpPerCoin = 1.0;
+
 class ScoringEngine {
   final Random _rng;
   ScoringEngine(this._rng);

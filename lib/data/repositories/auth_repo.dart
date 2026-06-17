@@ -6,7 +6,29 @@ class AuthRepository {
 
   Stream<User?> authStateChanges() => _auth.authStateChanges();
 
+  User? get currentUser => _auth.currentUser;
+
+  /// Of de huidige user een anoniem account is (geen e-mail gekoppeld).
+  bool get isAnonymous => _auth.currentUser?.isAnonymous ?? false;
+
   Future<void> signOut() => _auth.signOut();
+
+  /// Maak direct een anoniem account aan (geen inlogscherm nodig).
+  Future<UserCredential> signInAnonymously() => _auth.signInAnonymously();
+
+  /// Koppel een e-mail/wachtwoord aan het bestaande (anonieme) account.
+  /// Behoudt dezelfde uid, dus alle voortgang blijft staan.
+  Future<UserCredential> linkEmailPassword({
+    required String email,
+    required String password,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw StateError('Geen actieve sessie om een e-mail aan te koppelen.');
+    }
+    final cred = EmailAuthProvider.credential(email: email.trim(), password: password);
+    return user.linkWithCredential(cred);
+  }
 
   Future<UserCredential> signInWithEmailAndPassword({
     required String email,
