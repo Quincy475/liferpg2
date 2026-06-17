@@ -86,7 +86,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                   children: [
                     EnterMotion(delayMs: 20, child: _headerControls()),
                     const Expanded(
-                      child: Center(child: Text('Join of maak eerst een guild op Profile.')),
+                      child: Center(child: Text('Maak of join eerst een koppel via het Menu.')),
                     ),
                   ],
                 );
