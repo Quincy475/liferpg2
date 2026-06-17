@@ -18,7 +18,6 @@ dependencies:
   hive_flutter: ^1.1.0
   intl: ^0.20.2
   qr_flutter: ^4.1.0        # koppel-QR tonen
-  mobile_scanner: ^5.2.3    # koppel-QR scannen (vereist mogelijk nieuwere SDK; pas versie aan als pub get klaagt)
 
   # BELANGRIJK: GEEN expliciete 'collection' dependency, die veroorzaakt de pin-conflict met flutter_test
 

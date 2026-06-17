@@ -309,23 +309,9 @@ class _CoupleCard extends ConsumerWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Koppelen met code'),
-        content: Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: controller,
-                decoration: const InputDecoration(labelText: 'Koppelcode'),
-              ),
-            ),
-            IconButton(
-              tooltip: 'Scan QR',
-              icon: const Icon(Icons.qr_code_scanner),
-              onPressed: () async {
-                final scanned = await scanCoupleCode(context);
-                if (scanned != null) controller.text = scanned;
-              },
-            ),
-          ],
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(labelText: 'Koppelcode'),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuleer')),
