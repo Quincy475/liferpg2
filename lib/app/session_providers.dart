@@ -1,4 +1,4 @@
-// MERGED providers: auth/session + user stream + thema + rng + scoring + repos + quest controller
+// MERGED providers: auth/session + user stream + thema + rng + scoring + repos
 
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -10,19 +10,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 // Jouw domein
-import 'package:household_rpg/data/models/Quest.dart'; // jouw Quest-model
 import 'package:household_rpg/data/models/User_profile.dart';
 import 'package:household_rpg/data/models/models.dart';
-import 'package:household_rpg/data/models/pet.dart';
 import 'package:household_rpg/data/models/skillNode.dart';
-import 'package:household_rpg/data/repositories/pet_repo.dart';
-import 'package:household_rpg/data/repositories/quest_repo.dart'; // jouw QuestRepository
 import 'package:household_rpg/data/repositories/skill_node_repository.dart';
 import 'package:household_rpg/data/repositories/skill_tree_repository.dart';
 import 'package:household_rpg/data/repositories/auth_repo.dart';
 import 'package:household_rpg/data/repositories/user_repo.dart';
-import 'package:household_rpg/features/pet/data/furniture_repo.dart';
-import 'package:household_rpg/features/quest/state/quest_controller.dart';
 import 'package:household_rpg/features/skills/domain/node.dart';
 
 import 'package:household_rpg/scoring/scoring_enginge.dart';
@@ -30,8 +24,6 @@ import 'package:household_rpg/scoring/scoring_enginge.dart';
 // Lokale repos (zoals je had)
 import 'package:household_rpg/data/repositories/task_repo.dart';
 import 'package:household_rpg/data/repositories/shop_repo.dart';
-import 'package:household_rpg/data/repositories/event_repo.dart';
-import 'package:household_rpg/data/repositories/raid_repo.dart';
 import 'package:household_rpg/data/repositories/personal_task_repo.dart';
 
 // Hive (voor thema)
@@ -104,10 +96,6 @@ final sessionBootstrapProvider = FutureProvider<void>((ref) async {
   await ref.read(fsUserRepoProvider).ensureUserDoc(authUser.uid, defaultName: fallbackName);
 });
 
-final petRepoProvider = Provider<PetRepository>((ref) {
-  return PetRepository(FirebaseFirestore.instance);
-});
-
 /// Huidig uid
 final currentUserIdProvider = Provider<String?>((ref) {
   final authUser = ref.watch(authStateProvider).value;
@@ -143,32 +131,6 @@ final fsSkillTreeRepoProvider = Provider<SkillTreeRepository>(
   (ref) => SkillTreeRepository(FirebaseFirestore.instance),
 );
 
-final questControllerProvider = StateNotifierProvider<QuestController, QuestState>((ref) {
-  // start bootstrappen (ingelogde user + ensureUserDoc)
-  final boot = ref.watch(sessionBootstrapProvider);
-
-  final repo = ref.watch(questRepoProvider);
-  final meNow = ref.watch(currentUserProvider).value; // kan nog null zijn
-  final controller = QuestController(repo, initialUser: meNow);
-
-  // 1) luister naar user-wijzigingen (guild switch, profiel update)
-  ref.listen<UserProfile?>(
-    currentUserProvider.select((a) => a.value),
-    (prev, next) => controller.setUser(next),
-    fireImmediately: true,
-  );
-
-  // 2) wanneer bootstrap klaar is, haal user nogmaals op en set hem
-  ref.listen<AsyncValue<void>>(sessionBootstrapProvider, (prev, next) {
-    if (next.hasValue) {
-      final me = ref.read(currentUserProvider).value;
-      controller.setUser(me);
-    }
-  });
-
-  return controller;
-});
-
 // ---- Providers
 final skillNodeRepoProvider = Provider<SkillNodeRepository>((ref) {
   final db = FirebaseFirestore.instance;
@@ -192,20 +154,6 @@ final guildShopItemsProvider =
   final repo = ref.read(shopRepoProvider);
   return repo.watchGuildShopItems(guildId);
 });
-
-
-// Pet state stream (kan null zijn als user nog geen pet koos)
-// final petStateProvider = StreamProvider<PetState?>((ref) {
-//   final uid = ref.watch(currentUserIdProvider);
-//   if (uid == null) return const Stream.empty();
-//   return ref.read(petRepoProvider).watchState(uid);
-// });
-
-// final roomLayoutProvider = StreamProvider<RoomLayout?>((ref) {
-//   final uid = ref.watch(currentUserIdProvider);
-//   if (uid == null) return const Stream.empty();
-//   return ref.read(petRepoProvider).watchRoom(uid);
-// });
 
 /// ---------------------------------------------------------------------------
 /// Thema (zoals je had), met hive-persist
@@ -296,11 +244,6 @@ final shopRepoProvider = Provider<ShopRepository>((ref) {
   final db = ref.read(firestoreProvider);
   return ShopRepository(db);
 });
-final eventRepoProvider = Provider<EventRepository>((_) => EventRepository());
-final raidRepoProvider = Provider<RaidRepository>((_) => RaidRepository());
-
-final furnitureReppoProvider  = Provider<FurnitureRepo>((_) => FurnitureRepo());
-
 /// ---------------------------------------------------------------------------
 /// Persoonlijke modus (v2)
 /// ---------------------------------------------------------------------------
@@ -309,117 +252,6 @@ final appModeProvider = StateProvider<AppMode>((ref) => AppMode.guild);
 final personalTaskRepoProvider = Provider<PersonalTaskRepository>((ref) {
   return PersonalTaskRepository(ref.read(firestoreProvider));
 });
-/// ---------------------------------------------------------------------------
-/// Quest state + controller (nu met echte uid uit Firebase i.p.v. const 'me')
-/// ---------------------------------------------------------------------------
-// class QuestState {
-//   final List<Quest> dailies;
-//   final List<Quest> coops;
-//   final bool loading;
-//   final String? error;
-
-//   const QuestState({
-//     required this.dailies,
-//     required this.coops,
-//     this.loading = false,
-//     this.error,
-//   });
-
-//   QuestState copyWith({
-//     List<Quest>? dailies,
-//     List<Quest>? coops,
-//     bool? loading,
-//     String? error,
-//   }) {
-//     return QuestState(
-//       dailies: dailies ?? this.dailies,
-//       coops: coops ?? this.coops,
-//       loading: loading ?? this.loading,
-//       error: error,
-//     );
-//   }
-
-//   static const empty = QuestState(dailies: [], coops: [], loading: false);
-// }
-
-// class QuestController extends StateNotifier<QuestState> {
-//   QuestController(this._repo, this._userId) : super(QuestState.empty) {
-//     // Als _userId leeg is, wachten we op bootstrap; anders meteen refresh
-//     if (_userId.isNotEmpty) refresh();
-//   }
-
-//   final QuestRepository _repo;
-//   final String _userId;
-
-//   UserProfile? _user;
-//   // String? _user = _user?.id;
-
-//   /// Bootstrap / update user als deze later binnenkomt of wijzigt
-//   void setUser(UserProfile user) {
-//     final first = _user == null;
-//     _user = user;
-//     if (first) {
-//       refresh();
-//     } else {
-//       // user switch → opnieuw laden
-//       refresh();
-//     }
-//   }
-
-//   Future<void> refresh() async {
-//     print('refresh');
-//     final u = _user;
-//     if (u == null) return; // nog geen user bekend
-
-//     try {
-//       state = state.copyWith(loading: true, error: null);
-//       final d = await _repo.getDailyQuests(u);
-//       final c = await _repo.getCoopQuests(u);
-//       state = state.copyWith(dailies: d, coops: c, loading: false);
-//     } catch (e) {
-//       state = state.copyWith(loading: false, error: e.toString());
-//     }
-//   }
-
-//   Future<void> seedTasksForGuild() async {
-//     print('SEEDING TASKS');
-//     print(_user);
-//     print(_userId);
-
-//     // await _repo.seedLeftColumnDefaults(guildId: guildId, );
-//   }
-
-//   // Future<void> refresh() async {
-//   //   if (_user.isEmpty) return; // wacht tot uid bekend is
-//   //   try {
-//   //     state = state.copyWith(loading: true, error: null);
-//   //     final d = await _repo.getDailyQuests(_user);
-//   //     final c = await _repo.getCoopQuests(_user);
-//   //     state = state.copyWith(dailies: d, coops: c, loading: false);
-//   //   } catch (e) {
-//   //     state = state.copyWith(loading: false, error: e.toString());
-//   //   }
-//   // }
-
-//   Future<void> completeDaily(String questId) async {
-//     // if (_user) return;
-//     // await _repo.completeDaily(questId, _user);
-//     // await refresh();
-//   }
-
-//   Future<void> contribute(String questId, double delta) async {
-//     // if (_user.isEmpty) return;
-//     // await _repo.contributeCoop(questId, _user, delta);
-//     // await refresh();
-//   }
-
-//   Future<void> claim(String questId) async {
-//     // if (_user.isEmpty) return;
-//     // await _repo.claimCoop(questId, _user);
-//     // await refresh();
-//   }
-// }
-
 /// Belangrijk: we wachten op `sessionBootstrapProvider` zodat er zeker een uid is.
 /// Daarna lezen we het uid uit `currentUserIdProvider`. Verandert de uid (b.v. bij
 /// upgrade/linken), dan wordt deze provider herbouwd met de nieuwe uid.
