@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class AppPalette {
   // Warm + fresh palette (avoid default purple bias)
@@ -82,6 +81,7 @@ ThemeData buildRpgTheme(Color seed) {
 
 /// Night board: donker, strak, één accentkleur (de seed, standaard violet) met
 /// mint en goud als ondersteunende kleuren. Vaste inktkleuren voor vlakken.
+/// Lettertype: systeemfont (Sora uit het concept vraagt een eigen font-bundel).
 class NightPalette {
   static const ink = Color(0xFF0F1115);
   static const card = Color(0xFF171A21);
@@ -125,7 +125,7 @@ ThemeData buildNightTheme(Color seed) {
     colorScheme: scheme,
     scaffoldBackgroundColor: NightPalette.ink,
   );
-  final text = GoogleFonts.soraTextTheme(base.textTheme).apply(
+  final text = base.textTheme.apply(
     bodyColor: NightPalette.text,
     displayColor: NightPalette.text,
   );
