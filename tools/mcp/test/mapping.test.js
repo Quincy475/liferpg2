@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { SKILLS, chunk, normTitle, shopItemSchema, taskSchema, toShopData, toTemplateData } from "../src/mapping.js";
+import { WEEKLY_TAKEOVER_MINUTES, SKILLS, chunk, normTitle, shopItemSchema, taskSchema, toShopData, toTemplateData } from "../src/mapping.js";
 
 test("skill-volgorde komt overeen met SkillType-enum in de app", () => {
   assert.deepEqual(SKILLS, ["cooking", "cleaning", "fixing", "laundry", "admin"]);
@@ -17,6 +17,14 @@ test("taak: defaults + mapping naar TaskTemplate-velden", () => {
   assert.equal(d.dueHour, 22);
   assert.equal(d.takeoverAfterMinutes, 60);
   assert.equal(d.groupId, null);
+});
+
+test("taak: wekelijks blijft de hele week open (anders direct missed)", () => {
+  const w = toTemplateData(taskSchema.parse({ title: "WC", schedule: "weekly" }));
+  assert.equal(w.takeoverAfterMinutes, WEEKLY_TAKEOVER_MINUTES);
+  // maandag 22:00 + takeover moet minstens zondag 22:00 zijn
+  assert.ok(WEEKLY_TAKEOVER_MINUTES >= 6 * 24 * 60);
+  assert.equal(toTemplateData(taskSchema.parse({ title: "x" })).takeoverAfterMinutes, 60);
 });
 
 test("taak: once wordt custom/niet-herhaalbaar en vereist date", () => {

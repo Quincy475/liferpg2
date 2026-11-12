@@ -52,7 +52,7 @@ export function toTemplateData(t, { groupId = null } = {}) {
     intervalValue: t.schedule === "everyXDays" ? t.intervalDays : 1,
     defaultAssigneeUserId: null,
     claimableByUserIds: [],
-    takeoverAfterMinutes: 60, // zelfde defaults als de huishoud-taakdialoog
+    takeoverAfterMinutes: t.schedule === "weekly" ? WEEKLY_TAKEOVER_MINUTES : 60, // anders: default van de taakdialoog
     carryOverPolicy: "double_next_success",
     active: true,
     dueHour: t.dueHour,
@@ -84,5 +84,10 @@ export function chunk(arr, size) {
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
   return out;
 }
+
+// Een wekelijkse instance staat op maandag (deadline dueHour). Met de standaard 60 minuten
+// marktovername markeert de app hem op dinsdag al als "missed" en verdwijnt hij uit beeld.
+// Voor "ergens deze week" blijft hij daarom open tot zondag 23:00.
+export const WEEKLY_TAKEOVER_MINUTES = 8700;
 
 export const normTitle = (s) => s.trim().toLowerCase().replace(/\s+/g, " ");
