@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:household_rpg/app/session_providers.dart';
+import 'package:household_rpg/data/local/hive_boxes.dart';
 import 'package:household_rpg/data/models/models.dart';
 import 'package:household_rpg/data/repositories/task_mvp_repo.dart';
 import 'package:household_rpg/data/repositories/personal_task_repo.dart';
@@ -1157,7 +1158,7 @@ final _coopGroupsProvider =
 });
 
 /// Paneel met de coöp-quests (taakgroepen) en hun gezamenlijke voortgang.
-class _CoopQuestsPanel extends ConsumerWidget {
+class _CoopQuestsPanel extends ConsumerStatefulWidget {
   final String guildId;
   final DateTime weekStart;
   final DateTime weekEnd;
@@ -1168,29 +1169,100 @@ class _CoopQuestsPanel extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_CoopQuestsPanel> createState() => _CoopQuestsPanelState();
+}
+
+class _CoopQuestsPanelState extends ConsumerState<_CoopQuestsPanel> {
+  static const _prefKey = 'coop_panel_expanded';
+  late bool _expanded;
+
+  @override
+  void initState() {
+    super.initState();
+    final saved = appBox.get(_prefKey);
+    _expanded = saved is bool ? saved : true;
+  }
+
+  void _toggle() {
+    setState(() => _expanded = !_expanded);
+    appBox.put(_prefKey, _expanded);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final guildId = widget.guildId;
     final groups = ref.watch(_coopGroupsProvider(guildId)).value ?? const <TaskGroup>[];
     if (groups.isEmpty) return const SizedBox.shrink();
     final instances = ref.watch(_weekInstancesProvider((
       guildId: guildId,
-      start: weekStart,
-      end: weekEnd,
+      start: widget.weekStart,
+      end: widget.weekEnd,
     ))).value ?? const <TaskInstance>[];
+
+    final theme = Theme.of(context);
+    final inGroups = instances.where((i) => i.groupId != null).toList();
+    final doneSubtasks =
+        inGroups.where((i) => i.status == TaskInstanceStatus.completed).length;
+    final doneQuests = groups.where((g) {
+      final mine = instances.where((i) => i.groupId == g.id).toList();
+      return mine.isNotEmpty && mine.every((i) => i.status == TaskInstanceStatus.completed);
+    }).length;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Coöp-quests samen', style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 6),
-          for (final g in groups)
-            _CoopGroupCard(
-              group: g,
-              instances: instances.where((i) => i.groupId == g.id).toList(),
-              onDelete: () => _deleteGroup(context, ref, g),
-              onEdit: () => _editGroup(context, ref, g),
+          InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: _toggle,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(
+                children: [
+                  Text('Coöp-quests samen', style: theme.textTheme.titleSmall),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '$doneQuests/${groups.length} klaar · $doneSubtasks/${inGroups.length} subtaken',
+                      style: theme.textTheme.bodySmall,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  AnimatedRotation(
+                    turns: _expanded ? 0 : -0.25,
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(
+                      Icons.expand_more,
+                      semanticLabel: _expanded ? 'Inklappen' : 'Uitklappen',
+                    ),
+                  ),
+                ],
+              ),
             ),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            alignment: Alignment.topCenter,
+            child: _expanded
+                ? ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 280),
+                    child: ListView(
+                      shrinkWrap: true,
+                      padding: EdgeInsets.zero,
+                      children: [
+                        for (final g in groups)
+                          _CoopGroupCard(
+                            group: g,
+                            instances: instances.where((i) => i.groupId == g.id).toList(),
+                            onDelete: () => _deleteGroup(context, ref, g),
+                            onEdit: () => _editGroup(context, ref, g),
+                          ),
+                      ],
+                    ),
+                  )
+                : const SizedBox(width: double.infinity),
+          ),
         ],
       ),
     );
@@ -1213,7 +1285,7 @@ class _CoopQuestsPanel extends ConsumerWidget {
     if (ok != true) return;
     await ref
         .read(taskMvpRepoProvider)
-        .deleteGroup(guildId: guildId, groupId: g.id, actorUserId: me.id);
+        .deleteGroup(guildId: widget.guildId, groupId: g.id, actorUserId: me.id);
     ref.invalidate(_weekInstancesProvider);
   }
 
@@ -1246,7 +1318,7 @@ class _CoopQuestsPanel extends ConsumerWidget {
     );
     if (ok != true || titleC.text.trim().isEmpty) return;
     await ref.read(taskMvpRepoProvider).updateGroup(
-          guildId: guildId,
+          guildId: widget.guildId,
           input: TaskGroup(
             id: g.id,
             title: titleC.text.trim(),
