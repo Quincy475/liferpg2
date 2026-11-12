@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:household_rpg/app/session_providers.dart';
+import 'package:household_rpg/features/inventory/inventory_page.dart';
 import 'package:household_rpg/features/profile/auth_gate_page.dart';
 import 'package:household_rpg/features/profile/menu_page.dart';
 import 'package:household_rpg/features/profile/profile_page.dart';
@@ -18,7 +19,7 @@ class HouseholdRPGApp extends ConsumerWidget {
       title: 'Household RPG MVP',
       themeMode: theme.mode,
       theme: buildRpgLightTheme(theme.seedColor),
-      darkTheme: buildRpgTheme(theme.seedColor),
+      darkTheme: buildNightTheme(theme.seedColor),
       home: const _HomeShell(),
     );
   }
@@ -37,6 +38,7 @@ class _HomeShellState extends ConsumerState<_HomeShell> {
   final _pages = const [
     TasksPage(),
     ShopPage(),
+    InventoryPage(),
     ProfilePage(),
     MenuPage(),
   ];
@@ -69,9 +71,10 @@ class _HomeShellState extends ConsumerState<_HomeShell> {
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.checklist), label: 'Tasks'),
+          NavigationDestination(icon: Icon(Icons.checklist), label: 'Taken'),
           NavigationDestination(icon: Icon(Icons.store), label: 'Shop'),
-          NavigationDestination(icon: Icon(Icons.person), label: 'Profile'),
+          NavigationDestination(icon: Icon(Icons.backpack_outlined), label: 'Inventory'),
+          NavigationDestination(icon: Icon(Icons.person), label: 'Profiel'),
           NavigationDestination(icon: Icon(Icons.more_horiz), label: 'Menu'),
         ],
       ),

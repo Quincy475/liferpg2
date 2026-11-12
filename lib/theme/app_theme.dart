@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class AppPalette {
   // Warm + fresh palette (avoid default purple bias)
@@ -79,6 +80,151 @@ ThemeData buildRpgTheme(Color seed) {
   );
 }
 
+/// Night board: donker, strak, één accentkleur (de seed, standaard violet) met
+/// mint en goud als ondersteunende kleuren. Vaste inktkleuren voor vlakken.
+class NightPalette {
+  static const ink = Color(0xFF0F1115);
+  static const card = Color(0xFF171A21);
+  static const cardHigh = Color(0xFF1B1F29);
+  static const nav = Color(0xFF12151B);
+  static const line = Color(0xFF272C37);
+  static const text = Color(0xFFF2F3F5);
+  static const textMuted = Color(0xFF8B93A3);
+  static const mint = Color(0xFF3DDC97);
+  static const gold = Color(0xFFF5C451);
+  static const danger = Color(0xFFFF6B6B);
+}
+
+ThemeData buildNightTheme(Color seed) {
+  final scheme = ColorScheme.fromSeed(
+    seedColor: seed,
+    brightness: Brightness.dark,
+  ).copyWith(
+    primary: seed,
+    onPrimary: NightPalette.ink,
+    secondary: NightPalette.mint,
+    onSecondary: NightPalette.ink,
+    tertiary: NightPalette.gold,
+    onTertiary: NightPalette.ink,
+    error: NightPalette.danger,
+    surface: NightPalette.ink,
+    onSurface: NightPalette.text,
+    onSurfaceVariant: NightPalette.textMuted,
+    surfaceContainerLowest: NightPalette.ink,
+    surfaceContainerLow: NightPalette.card,
+    surfaceContainer: NightPalette.card,
+    surfaceContainerHigh: NightPalette.cardHigh,
+    surfaceContainerHighest: NightPalette.cardHigh,
+    outline: NightPalette.textMuted,
+    outlineVariant: NightPalette.line,
+  );
+
+  final base = ThemeData(
+    useMaterial3: true,
+    brightness: Brightness.dark,
+    colorScheme: scheme,
+    scaffoldBackgroundColor: NightPalette.ink,
+  );
+  final text = GoogleFonts.soraTextTheme(base.textTheme).apply(
+    bodyColor: NightPalette.text,
+    displayColor: NightPalette.text,
+  );
+
+  final rounded12 = RoundedRectangleBorder(borderRadius: BorderRadius.circular(12));
+
+  return base.copyWith(
+    textTheme: text,
+    primaryTextTheme: text,
+    appBarTheme: AppBarTheme(
+      backgroundColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      centerTitle: false,
+      titleTextStyle: text.titleLarge?.copyWith(fontSize: 24, fontWeight: FontWeight.w500),
+    ),
+    cardTheme: CardThemeData(
+      color: NightPalette.card,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: NightPalette.line),
+      ),
+    ),
+    dividerTheme: const DividerThemeData(color: NightPalette.line, space: 1),
+    chipTheme: base.chipTheme.copyWith(
+      backgroundColor: Colors.transparent,
+      selectedColor: seed,
+      side: const BorderSide(color: NightPalette.line),
+      shape: const StadiumBorder(),
+      showCheckmark: false,
+      labelStyle: text.bodySmall?.copyWith(color: NightPalette.textMuted),
+      secondaryLabelStyle: text.bodySmall?.copyWith(color: NightPalette.ink),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(shape: rounded12, textStyle: text.labelLarge),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        shape: rounded12,
+        side: const BorderSide(color: NightPalette.line),
+        foregroundColor: NightPalette.text,
+      ),
+    ),
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: SegmentedButton.styleFrom(
+        backgroundColor: NightPalette.card,
+        foregroundColor: NightPalette.textMuted,
+        selectedBackgroundColor: seed,
+        selectedForegroundColor: NightPalette.ink,
+        side: const BorderSide(color: NightPalette.line),
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: NightPalette.card,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: NightPalette.line),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: NightPalette.line),
+      ),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: NightPalette.cardHigh,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: NightPalette.line),
+      ),
+    ),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: NightPalette.nav,
+      surfaceTintColor: Colors.transparent,
+      indicatorColor: seed.withValues(alpha: 0.18),
+      height: 66,
+      labelTextStyle: WidgetStateProperty.resolveWith(
+        (states) => text.labelSmall?.copyWith(
+          color: states.contains(WidgetState.selected) ? seed : NightPalette.textMuted,
+        ),
+      ),
+      iconTheme: WidgetStateProperty.resolveWith(
+        (states) => IconThemeData(
+          color: states.contains(WidgetState.selected) ? seed : NightPalette.textMuted,
+        ),
+      ),
+    ),
+    progressIndicatorTheme: ProgressIndicatorThemeData(
+      color: seed,
+      linearTrackColor: NightPalette.line,
+    ),
+  );
+}
+
 ThemeData buildRpgLightTheme(Color seed) {
   final seedHsl = HSLColor.fromColor(seed);
   final lightBg = seedHsl
@@ -140,6 +286,12 @@ class AtmosphereBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
+    if (dark) {
+      return ColoredBox(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        child: SizedBox.expand(child: child),
+      );
+    }
     final seed = Theme.of(context).colorScheme.primary;
     final tones = _backgroundTones(seed: seed, dark: dark);
     return Stack(

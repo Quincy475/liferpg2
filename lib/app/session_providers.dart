@@ -173,12 +173,12 @@ class ThemeController extends Notifier<ThemeState> {
   static const _kMode = 'theme_mode'; // 'system'|'light'|'dark'
   static const _kSeed = 'theme_seed'; // int color value
 
-  // Warme, knusse standaardkleur (terracotta) — past bij de duo/"samen"-sfeer.
-  static const _defaultSeed = 0xFFE07A5F;
+  // Night board: violet accent op donker. Bestaande keuzes in de Hive-box blijven gelden.
+  static const _defaultSeed = 0xFF8B7CFF;
 
   @override
   ThemeState build() {
-    final modeStr = (appBox.get(_kMode) as String?) ?? 'system';
+    final modeStr = (appBox.get(_kMode) as String?) ?? 'dark';
     final seedInt = (appBox.get(_kSeed) as int?) ?? _defaultSeed;
     return ThemeState(mode: _parseMode(modeStr), seedColor: Color(seedInt));
   }

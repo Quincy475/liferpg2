@@ -119,6 +119,7 @@ class TaskInstance {
   final String title;
   final String description;
   final String? groupId;
+  final SkillType? skillType;
 
   const TaskInstance({
     required this.id,
@@ -136,6 +137,7 @@ class TaskInstance {
     this.completedAt,
     this.bonusReason,
     this.groupId,
+    this.skillType,
   });
 
   static DateTime _dt(dynamic v) {
@@ -167,7 +169,13 @@ class TaskInstance {
       title: (m['title'] ?? '') as String,
       description: (m['description'] ?? '') as String,
       groupId: m['groupId'] as String?,
+      skillType: _skillFromIndex(m['skillTypeIndex']),
     );
+  }
+
+  static SkillType? _skillFromIndex(dynamic v) {
+    if (v is! int || v < 0 || v >= SkillType.values.length) return null;
+    return SkillType.values[v];
   }
 }
 

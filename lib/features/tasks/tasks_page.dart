@@ -52,8 +52,9 @@ class _TasksPageState extends ConsumerState<TasksPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Tasks'),
+        title: const Text('Deze week'),
         actions: [
+          if (meAsync.value != null) _CoinChip(coins: meAsync.value!.coins),
           IconButton(
             tooltip: 'Nieuw template',
             onPressed: () {
@@ -102,9 +103,15 @@ class _TasksPageState extends ConsumerState<TasksPage> {
               )));
               final templatesAsync = ref.watch(_templatesProvider(me.guildId!));
 
+              final partner = ref.watch(partnerProvider);
+              final weekInstances = instancesAsync.value ?? const <TaskInstance>[];
               return Column(
                 children: [
-                  EnterMotion(delayMs: 20, child: _headerControls()),
+                  EnterMotion(delayMs: 20, child: _headerControls(instances: weekInstances)),
+                  _StatsRow(
+                    together: me.weeklyPoints + (partner?.weeklyPoints ?? 0),
+                    instances: weekInstances,
+                  ),
                   _CoopQuestsPanel(
                     guildId: me.guildId!,
                     weekStart: _weekStart,
@@ -521,115 +528,64 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
     });
   }
 
-  Widget _headerControls() {
+  Widget _headerControls({List<TaskInstance> instances = const []}) {
     final mode = ref.watch(appModeProvider);
+    Widget chip(String label, TaskFilterMode m) => Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: ChoiceChip(
+            label: Text(label),
+            selected: _filterMode == m,
+            onSelected: (_) => setState(() => _filterMode = m),
+          ),
+        );
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
       child: Column(
         children: [
           // Modus toggle: Guild | Persoonlijk
           SegmentedButton<AppMode>(
             segments: const [
-              ButtonSegment(value: AppMode.guild, label: Text('Guild'), icon: Icon(Icons.group, size: 16)),
+              ButtonSegment(value: AppMode.guild, label: Text('Samen'), icon: Icon(Icons.group, size: 16)),
               ButtonSegment(value: AppMode.personal, label: Text('Persoonlijk'), icon: Icon(Icons.person, size: 16)),
             ],
             selected: {mode},
             onSelectionChanged: (v) => ref.read(appModeProvider.notifier).state = v.first,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
+          _WeekStrip(
+            weekStart: _weekStart,
+            instances: instances,
+            onPrev: () => setState(() => _weekAnchor = _weekAnchor.subtract(const Duration(days: 7))),
+            onNext: () => setState(() => _weekAnchor = _weekAnchor.add(const Duration(days: 7))),
+          ),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
-                  child: SegmentedButton<TaskViewMode>(
-                    segments: const [
-                      ButtonSegment(value: TaskViewMode.board, label: Text('Board')),
-                      ButtonSegment(value: TaskViewMode.week, label: Text('Planner')),
+                  child: Row(
+                    children: [
+                      chip('Open', TaskFilterMode.openClaimed),
+                      chip('Van mij', TaskFilterMode.mine),
+                      chip('Vrij', TaskFilterMode.unclaimed),
+                      chip('Te laat', TaskFilterMode.late),
+                      chip('Alle', TaskFilterMode.all),
                     ],
-                    selected: {_viewMode},
-                    onSelectionChanged: (v) => setState(() => _viewMode = v.first),
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(999),
-                  color: Theme.of(context).colorScheme.surface,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
-                      iconSize: 18,
-                      onPressed: () {
-                        setState(() => _weekAnchor = _weekAnchor.subtract(const Duration(days: 7)));
-                      },
-                      icon: const Icon(Icons.chevron_left),
-                    ),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 74),
-                      child: Text(
-                        DateFormat('dd MMM').format(_weekStart),
-                        textAlign: TextAlign.center,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ),
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
-                      iconSize: 18,
-                      onPressed: () {
-                        setState(() => _weekAnchor = _weekAnchor.add(const Duration(days: 7)));
-                      },
-                      icon: const Icon(Icons.chevron_right),
-                    ),
-                  ],
-                ),
+              SegmentedButton<TaskViewMode>(
+                showSelectedIcon: false,
+                style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                segments: const [
+                  ButtonSegment(value: TaskViewMode.board, icon: Icon(Icons.view_agenda_outlined, size: 18)),
+                  ButtonSegment(value: TaskViewMode.week, icon: Icon(Icons.calendar_view_week, size: 18)),
+                ],
+                selected: {_viewMode},
+                onSelectionChanged: (v) => setState(() => _viewMode = v.first),
               ),
             ],
-          ),
-          const SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                ChoiceChip(
-                  label: const Text('Open'),
-                  selected: _filterMode == TaskFilterMode.openClaimed,
-                  onSelected: (_) => setState(() => _filterMode = TaskFilterMode.openClaimed),
-                ),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  label: const Text('Mijn taken'),
-                  selected: _filterMode == TaskFilterMode.mine,
-                  onSelected: (_) => setState(() => _filterMode = TaskFilterMode.mine),
-                ),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  label: const Text('Unclaimed'),
-                  selected: _filterMode == TaskFilterMode.unclaimed,
-                  onSelected: (_) => setState(() => _filterMode = TaskFilterMode.unclaimed),
-                ),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  label: const Text('Te laat'),
-                  selected: _filterMode == TaskFilterMode.late,
-                  onSelected: (_) => setState(() => _filterMode = TaskFilterMode.late),
-                ),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  label: const Text('Alle'),
-                  selected: _filterMode == TaskFilterMode.all,
-                  onSelected: (_) => setState(() => _filterMode = TaskFilterMode.all),
-                ),
-              ],
-            ),
           ),
         ],
       ),
@@ -1578,6 +1534,199 @@ class _DayColumn extends StatelessWidget {
   }
 }
 
+String _dayNl(DateTime d) => const ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'][d.weekday - 1];
+
+IconData _skillIcon(SkillType? s) => switch (s) {
+      SkillType.cooking => Icons.soup_kitchen_outlined,
+      SkillType.cleaning => Icons.cleaning_services_outlined,
+      SkillType.fixing => Icons.build_outlined,
+      SkillType.laundry => Icons.local_laundry_service_outlined,
+      SkillType.admin => Icons.assignment_outlined,
+      null => Icons.task_alt,
+    };
+
+class _CoinChip extends StatelessWidget {
+  final int coins;
+  const _CoinChip({required this.coins});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.only(right: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.toll, size: 16, color: theme.colorScheme.tertiary),
+          const SizedBox(width: 6),
+          Text('$coins',
+              style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.tertiary)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Dagstrook van de week: vandaag gemarkeerd, stipje toont de voortgang van die dag.
+class _WeekStrip extends StatelessWidget {
+  final DateTime weekStart;
+  final List<TaskInstance> instances;
+  final VoidCallback onPrev;
+  final VoidCallback onNext;
+  const _WeekStrip({
+    required this.weekStart,
+    required this.instances,
+    required this.onPrev,
+    required this.onNext,
+  });
+
+  bool _sameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final now = DateTime.now();
+    final fmt = DateFormat('d MMM');
+    final label = '${fmt.format(weekStart)} \u2013 ${fmt.format(weekStart.add(const Duration(days: 6)))}';
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              onPressed: onPrev,
+              icon: const Icon(Icons.chevron_left),
+              tooltip: 'Vorige week',
+            ),
+            Expanded(
+              child: Center(
+                child: Text(label,
+                    style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+              ),
+            ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              onPressed: onNext,
+              icon: const Icon(Icons.chevron_right),
+              tooltip: 'Volgende week',
+            ),
+          ],
+        ),
+        Row(
+          children: [
+            for (var n = 0; n < 7; n++)
+              Expanded(
+                child: Builder(builder: (context) {
+                  final day = weekStart.add(Duration(days: n));
+                  final isToday = _sameDay(day, now);
+                  final dayInst = instances
+                      .where((i) => _sameDay(i.scheduledFor, day) && i.status != TaskInstanceStatus.missed)
+                      .toList();
+                  final allDone = dayInst.isNotEmpty &&
+                      dayInst.every((i) => i.status == TaskInstanceStatus.completed);
+                  final dot = dayInst.isEmpty
+                      ? Colors.transparent
+                      : allDone
+                          ? cs.secondary
+                          : (isToday ? cs.onPrimary : cs.primary);
+                  return Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 2),
+                    padding: const EdgeInsets.symmetric(vertical: 7),
+                    decoration: BoxDecoration(
+                      color: isToday ? cs.primary : cs.surfaceContainer,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: isToday ? cs.primary : cs.outlineVariant),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(_dayNl(day),
+                            style: theme.textTheme.labelSmall?.copyWith(
+                                color: isToday ? cs.onPrimary : cs.onSurfaceVariant)),
+                        const SizedBox(height: 2),
+                        Text('${day.day}',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                                color: isToday ? cs.onPrimary : cs.onSurface)),
+                        const SizedBox(height: 4),
+                        Container(
+                          width: 5,
+                          height: 5,
+                          decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Twee grote cijfers: punten samen deze week en de voortgang van de coop-quests.
+class _StatsRow extends StatelessWidget {
+  final int together;
+  final List<TaskInstance> instances;
+  const _StatsRow({required this.together, required this.instances});
+
+  @override
+  Widget build(BuildContext context) {
+    final quest = instances.where((i) => i.groupId != null).toList();
+    final questDone = quest.where((i) => i.status == TaskInstanceStatus.completed).length;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: Row(
+        children: [
+          Expanded(child: _StatTile(value: '$together', label: 'punten samen')),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _StatTile(
+              value: quest.isEmpty ? '\u2013' : '$questDone/${quest.length}',
+              label: 'quest-taken klaar',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatTile extends StatelessWidget {
+  final String value;
+  final String label;
+  const _StatTile({required this.value, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(value, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w500)),
+          Text(label,
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        ],
+      ),
+    );
+  }
+}
+
 class _TaskCard extends StatelessWidget {
   final TaskInstance i;
   final String meId;
@@ -1599,79 +1748,114 @@ class _TaskCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     final canClaim = i.status == TaskInstanceStatus.open || i.status == TaskInstanceStatus.claimed;
     final canComplete = i.status != TaskInstanceStatus.completed && i.status != TaskInstanceStatus.missed;
     final isClaimedByMe = i.claimedByUserId == meId;
+    final done = i.status == TaskInstanceStatus.completed;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+    final (statusLabel, statusColor) = switch (i.status) {
+      TaskInstanceStatus.open => ('Open', cs.primary),
+      TaskInstanceStatus.claimed => ('Geclaimd', cs.tertiary),
+      TaskInstanceStatus.completed => ('Klaar', cs.secondary),
+      TaskInstanceStatus.missed => ('Gemist', cs.error),
+      TaskInstanceStatus.expired => ('Verlopen', cs.onSurfaceVariant),
+    };
+
+    final subtitle = [
+      'Deadline ${_dayNl(i.dueAt)} ${DateFormat('HH:mm').format(i.dueAt)}',
+      if (showClaim && i.claimedByUserId != null) (isClaimedByMe ? 'Jij' : 'Partner'),
+    ].join(' \u00b7 ');
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
       child: Card(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(child: Text(i.title, style: const TextStyle(fontWeight: FontWeight.w700))),
-                  if (showClaim) _StatusPill(status: i.status),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text('🪙 ${i.coinsAwarded} • due ${DateFormat('EEE HH:mm').format(i.dueAt)}'),
-              if (showClaim && i.claimedByUserId != null)
-                Text('Claimed by: ${i.claimedByUserId == meId ? 'Me' : i.claimedByUserId}'),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  OutlinedButton(onPressed: onOpen, child: const Text('Open')),
-                  if (showClaim)
-                    OutlinedButton(
-                      onPressed: canClaim
-                          ? () {
-                              if (isClaimedByMe) {
-                                onUnclaim(i.id, i.templateId);
-                              } else {
-                                onClaim(i.id, i.templateId);
-                              }
-                            }
-                          : null,
-                      child: Text(isClaimedByMe ? 'Unclaim' : 'Claim'),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onOpen,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: cs.primary.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(_skillIcon(i.skillType), color: cs.primary, size: 22),
                     ),
-                  FilledButton(
-                    onPressed: canComplete ? () => onComplete(i.id) : null,
-                    child: const Text('Complete'),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            i.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w500,
+                              color: done ? cs.onSurfaceVariant : cs.onSurface,
+                              decoration: done ? TextDecoration.lineThrough : null,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text('+${i.coinsAwarded}',
+                            style: theme.textTheme.titleSmall?.copyWith(color: cs.tertiary)),
+                        if (showClaim)
+                          Text(statusLabel,
+                              style: theme.textTheme.labelSmall?.copyWith(color: statusColor)),
+                      ],
+                    ),
+                  ],
+                ),
+                if (canComplete || (showClaim && canClaim)) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      if (showClaim && canClaim)
+                        TextButton(
+                          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                          onPressed: () => isClaimedByMe
+                              ? onUnclaim(i.id, i.templateId)
+                              : onClaim(i.id, i.templateId),
+                          child: Text(isClaimedByMe ? 'Laat los' : 'Claim'),
+                        ),
+                      const Spacer(),
+                      if (canComplete)
+                        FilledButton.icon(
+                          style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+                          onPressed: () => onComplete(i.id),
+                          icon: const Icon(Icons.check, size: 18),
+                          label: const Text('Klaar'),
+                        ),
+                    ],
                   ),
                 ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
-  }
-}
-
-class _StatusPill extends StatelessWidget {
-  final TaskInstanceStatus status;
-  const _StatusPill({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = switch (status) {
-      TaskInstanceStatus.open => Colors.blue,
-      TaskInstanceStatus.claimed => Colors.orange,
-      TaskInstanceStatus.completed => Colors.green,
-      TaskInstanceStatus.missed => Colors.red,
-      TaskInstanceStatus.expired => Colors.grey,
-    };
-    return Chip(label: Text(status.name), backgroundColor: color.withOpacity(0.2));
   }
 }
 
