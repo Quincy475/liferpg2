@@ -266,11 +266,14 @@ class _LoginForm extends ConsumerStatefulWidget {
 class _LoginFormState extends ConsumerState<_LoginForm> {
   final _email = TextEditingController();
   final _password = TextEditingController();
+  final _code = TextEditingController();
+  bool _useCode = false;
 
   @override
   void dispose() {
     _email.dispose();
     _password.dispose();
+    _code.dispose();
     super.dispose();
   }
 
@@ -280,20 +283,43 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
       padding: const EdgeInsets.only(top: 8),
       child: Column(
         children: [
-          TextField(
-            controller: _email,
-            keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(labelText: 'E-mail'),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _password,
-            obscureText: true,
-            decoration: const InputDecoration(labelText: 'Wachtwoord'),
+          SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(value: false, label: Text('E-mail'), icon: Icon(Icons.alternate_email)),
+              ButtonSegment(value: true, label: Text('Inlogcode'), icon: Icon(Icons.key)),
+            ],
+            selected: {_useCode},
+            onSelectionChanged: (s) => setState(() => _useCode = s.first),
           ),
           const SizedBox(height: 12),
+          if (_useCode)
+            TextField(
+              controller: _code,
+              autocorrect: false,
+              enableSuggestions: false,
+              minLines: 1,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Inlogcode',
+                helperText: 'Je vindt hem in Menu → Account op een toestel waar je ingelogd bent.',
+              ),
+            )
+          else ...[
+            TextField(
+              controller: _email,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(labelText: 'E-mail'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _password,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Wachtwoord'),
+            ),
+          ],
+          const SizedBox(height: 12),
           FilledButton.icon(
-            onPressed: _login,
+            onPressed: _useCode ? _loginWithCode : _login,
             icon: const Icon(Icons.login),
             label: const Text('Inloggen'),
           ),
@@ -325,13 +351,35 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
     }
   }
 
+  Future<void> _loginWithCode() async {
+    final token = _code.text;
+    if (token.trim().isEmpty) {
+      _notify('Plak of typ je inlogcode.');
+      return;
+    }
+    widget.onBusy(true);
+    try {
+      await ref.read(authRepoProvider).signInWithLoginCode(token);
+      await ref.read(onboardingDoneProvider.notifier).complete();
+      _notify('Ingelogd.');
+    } on FirebaseAuthException catch (e) {
+      _notify(_authError(e));
+    } catch (e) {
+      _notify('Inloggen mislukt: $e');
+    } finally {
+      widget.onBusy(false);
+    }
+  }
+
   String _authError(FirebaseAuthException e) {
     switch (e.code) {
+      case 'invalid-login-code':
+        return 'Dit is geen geldige inlogcode.';
       case 'user-not-found':
         return 'Geen account gevonden voor dit e-mailadres.';
       case 'wrong-password':
       case 'invalid-credential':
-        return 'E-mail of wachtwoord klopt niet.';
+        return _useCode ? 'Inlogcode klopt niet (of is vervangen door een nieuwe).' : 'E-mail of wachtwoord klopt niet.';
       case 'invalid-email':
         return 'Ongeldig e-mailadres.';
       case 'too-many-requests':

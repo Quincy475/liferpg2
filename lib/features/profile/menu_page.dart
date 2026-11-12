@@ -85,6 +85,15 @@ class _AccountCard extends ConsumerWidget {
             ],
             const SizedBox(height: 8),
             Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: () => _createLoginCode(context, ref),
+                icon: const Icon(Icons.key),
+                label: const Text('Maak inlogcode'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Align(
               alignment: Alignment.centerRight,
               child: OutlinedButton.icon(
                 onPressed: () => _confirmLogout(context, ref),
@@ -167,6 +176,110 @@ class _AccountCard extends ConsumerWidget {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Koppelen mislukt: $e')));
       }
     }
+  }
+
+  /// Maakt een inlogcode die het wachtwoord vervangt (zie AuthRepository.createLoginCode).
+  Future<void> _createLoginCode(BuildContext context, WidgetRef ref) async {
+    final isAnon = ref.read(isFirebaseAnonymousProvider);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Inlogcode maken'),
+        content: Text(
+          isAnon
+              ? 'Je krijgt een code waarmee je op elk toestel in je account komt, zonder '
+                  'e-mail of wachtwoord. Wie de code heeft, kan in je account: bewaar hem veilig.'
+              : 'Je krijgt een code waarmee je inlogt in plaats van je wachtwoord. '
+                  'Je huidige wachtwoord werkt daarna niet meer en een eerdere inlogcode vervalt.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuleer')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Maak code')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    final auth = ref.read(authRepoProvider);
+    String? token;
+    try {
+      try {
+        token = await auth.createLoginCode();
+      } on FirebaseAuthException catch (e) {
+        if (e.code != 'requires-recent-login') rethrow;
+        if (!context.mounted) return;
+        final password = await _askPassword(context);
+        if (password == null || password.isEmpty) return;
+        await auth.reauthenticateWithPassword(password);
+        token = await auth.createLoginCode();
+      }
+    } on FirebaseAuthException catch (e) {
+      final msg = (e.code == 'wrong-password' || e.code == 'invalid-credential')
+          ? 'Wachtwoord klopt niet.'
+          : (e.message ?? 'Inlogcode maken mislukt (${e.code}).');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      }
+      return;
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Inlogcode maken mislukt: $e')));
+      }
+      return;
+    }
+
+    if (!context.mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Jouw inlogcode'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Bewaar hem nu: hij wordt niet opnieuw getoond.'),
+            const SizedBox(height: 12),
+            SelectableText(token!, style: Theme.of(ctx).textTheme.bodyMedium),
+          ],
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: token!));
+              if (ctx.mounted) {
+                ScaffoldMessenger.of(ctx)
+                    .showSnackBar(const SnackBar(content: Text('Gekopieerd.')));
+              }
+            },
+            icon: const Icon(Icons.copy),
+            label: const Text('Kopieer'),
+          ),
+          FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('Klaar')),
+        ],
+      ),
+    );
+  }
+
+  Future<String?> _askPassword(BuildContext context) {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Bevestig met je wachtwoord'),
+        content: TextField(
+          controller: controller,
+          obscureText: true,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Huidig wachtwoord'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuleer')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Bevestig')),
+        ],
+      ),
+    );
   }
 
   Future<void> _confirmLogout(BuildContext context, WidgetRef ref) async {
