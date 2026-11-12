@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "household-rpg": {
+      "command": "node",
+      "args": ["tools/mcp/src/index.js"],
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "${HOUSEHOLD_RPG_SERVICE_ACCOUNT}",
+        "FIREBASE_PROJECT_ID": "liferpg-2f2ae"
+      }
+    }
+  }
+}
