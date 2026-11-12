@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { initializeApp, cert, applicationDefault, getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
-import { SKILLS, chunk, normTitle, toShopData, toTemplateData } from "./mapping.js";
+import { SKILLS, chunk, normTitle, toShopData, toTemplateData, toTemplatePatch } from "./mapping.js";
 
 const ACTOR = process.env.RPG_ACTOR_UID || "mcp";
 const BATCH = 200; // ruim onder de 500-writes-limiet (docs + events)
@@ -153,6 +153,55 @@ export async function createQuest({ guildId, title, description = "", skill, bon
     dryRun,
   });
   return { groupId, quest: title, ...res };
+}
+
+/**
+ * Wijzigt bestaande templates gedeeltelijk. Verandert het schema of de deadline, dan worden
+ * open instances verwijderd (de app maakt ze opnieuw aan zodra de takenpagina opent);
+ * anders worden titel/coins van open instances meegenomen, zoals de app zelf doet.
+ */
+export async function updateTasks({ guildId, updates, dryRun = false }) {
+  await assertGuild(guildId);
+  const col = guild(guildId).collection("taskTemplates");
+  const updated = [];
+  const notFound = [];
+  for (const u of updates) {
+    const snap = await col.doc(u.id).get();
+    if (!snap.exists) {
+      notFound.push(u.id);
+      continue;
+    }
+    const { patch, regenerate } = toTemplatePatch(u);
+    updated.push({ id: u.id, title: snap.data().title, changes: Object.keys(patch), openInstancesReset: regenerate });
+    if (dryRun) continue;
+    const { scheduledDate, ...rest } = patch;
+    const data = { ...rest, updatedAt: FieldValue.serverTimestamp() };
+    if ("scheduledDate" in patch) {
+      data.scheduledDate = scheduledDate ? Timestamp.fromDate(new Date(`${scheduledDate}T00:00:00`)) : null;
+    }
+    const open = await guild(guildId)
+      .collection("taskInstances")
+      .where("templateId", "==", u.id)
+      .where("status", "in", ["open", "claimed"])
+      .get();
+    const batch = db().batch();
+    batch.set(snap.ref, data, { merge: true });
+    for (const d of open.docs) {
+      if (regenerate) batch.delete(d.ref);
+      else {
+        const sync = { updatedAt: FieldValue.serverTimestamp() };
+        if (patch.title !== undefined) sync.title = patch.title;
+        if (patch.coinsBase !== undefined) sync.coinsAwarded = patch.coinsBase;
+        batch.set(d.ref, sync, { merge: true });
+      }
+    }
+    batch.set(
+      guild(guildId).collection("taskEvents").doc(),
+      eventDoc(guildId, "updated_template", { templateId: u.id, payload: { title: patch.title ?? snap.data().title } }),
+    );
+    await batch.commit();
+  }
+  return { dryRun, updated, notFound };
 }
 
 /** Verwijdert templates + hun open instances (zoals de app: archiveTemplate). */

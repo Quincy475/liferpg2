@@ -23,6 +23,19 @@ export const taskSchema = z.object({
     .describe("Alleen voor schedule=once."),
 });
 
+// Alle velden optioneel (bewust zonder defaults): alleen wat is meegegeven verandert.
+export const taskUpdateSchema = z.object({
+  id: z.string().min(1).describe("Template-id uit list_tasks."),
+  title: z.string().trim().min(1).max(120).optional(),
+  coins: z.number().int().min(0).max(100000).optional(),
+  description: z.string().max(500).optional(),
+  skill: z.enum(SKILLS).optional(),
+  schedule: z.enum(SCHEDULES).optional(),
+  intervalDays: z.number().int().min(1).max(365).optional(),
+  dueHour: z.number().int().min(0).max(23).optional(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+
 export const shopItemSchema = z.object({
   name: z.string().trim().min(1).max(80),
   price: z.number().int().min(0).max(1000000),
@@ -60,6 +73,31 @@ export function toTemplateData(t, { groupId = null } = {}) {
     skillTypeIndex: t.skill ? SKILLS.indexOf(t.skill) : null,
     groupId,
   };
+}
+
+/**
+ * Gedeeltelijke update van een template. Geeft { patch, regenerate } terug:
+ * regenerate = true als schema/deadline veranderen, dan moeten open instances opnieuw
+ * door de app gegenereerd worden.
+ */
+export function toTemplatePatch(u) {
+  const patch = {};
+  if (u.title !== undefined) patch.title = u.title;
+  if (u.description !== undefined) patch.description = u.description;
+  if (u.coins !== undefined) patch.coinsBase = u.coins;
+  if (u.skill !== undefined) patch.skillTypeIndex = SKILLS.indexOf(u.skill);
+  if (u.dueHour !== undefined) patch.dueHour = u.dueHour;
+  if (u.schedule !== undefined) {
+    const once = u.schedule === "once";
+    if (once && !u.date) throw new Error(`Taak ${u.id}: schedule "once" vereist een date (YYYY-MM-DD).`);
+    patch.isRepeatable = !once;
+    patch.scheduleType = once ? "custom" : u.schedule;
+    patch.intervalValue = u.schedule === "everyXDays" ? (u.intervalDays ?? 1) : 1;
+    patch.takeoverAfterMinutes = u.schedule === "weekly" ? WEEKLY_TAKEOVER_MINUTES : 60;
+    patch.scheduledDate = once ? u.date : null;
+  }
+  if (Object.keys(patch).length === 0) throw new Error(`Taak ${u.id}: geen velden om te wijzigen.`);
+  return { patch, regenerate: u.schedule !== undefined || u.dueHour !== undefined };
 }
 
 /** Eén shop-item → velden zoals ShopItem.toMap (+ active). */

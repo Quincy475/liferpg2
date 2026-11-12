@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WEEKLY_TAKEOVER_MINUTES, SKILLS, chunk, normTitle, shopItemSchema, taskSchema, toShopData, toTemplateData } from "../src/mapping.js";
+import { WEEKLY_TAKEOVER_MINUTES, SKILLS, chunk, normTitle, shopItemSchema, taskSchema, toShopData, toTemplateData, toTemplatePatch } from "../src/mapping.js";
 
 test("skill-volgorde komt overeen met SkillType-enum in de app", () => {
   assert.deepEqual(SKILLS, ["cooking", "cleaning", "fixing", "laundry", "admin"]);
@@ -57,4 +57,16 @@ test("shop: defaults + mapping", () => {
 test("helpers", () => {
   assert.deepEqual(chunk([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
   assert.equal(normTitle("  Was   Draaien "), "was draaien");
+});
+
+test("update: alleen meegegeven velden, schema-wissel triggert regenerate", () => {
+  const a = toTemplatePatch({ id: "x", coins: 12, title: "Nieuw" });
+  assert.deepEqual(a.patch, { title: "Nieuw", coinsBase: 12 });
+  assert.equal(a.regenerate, false);
+  const b = toTemplatePatch({ id: "x", schedule: "daily" });
+  assert.equal(b.patch.scheduleType, "daily");
+  assert.equal(b.patch.takeoverAfterMinutes, 60);
+  assert.equal(b.regenerate, true);
+  assert.throws(() => toTemplatePatch({ id: "x" }), /geen velden/);
+  assert.throws(() => toTemplatePatch({ id: "x", schedule: "once" }), /date/);
 });

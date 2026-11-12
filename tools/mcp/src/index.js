@@ -4,7 +4,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { SKILLS, shopItemSchema, taskSchema } from "./mapping.js";
+import { SKILLS, shopItemSchema, taskSchema, taskUpdateSchema } from "./mapping.js";
 import * as fs from "./firestore.js";
 
 const server = new McpServer({ name: "household-rpg", version: "0.1.0" });
@@ -54,6 +54,15 @@ server.registerTool("create_tasks", {
   },
   annotations: WRITE,
 }, run((a) => fs.createTasks(a)));
+
+server.registerTool("update_tasks", {
+  title: "Taken wijzigen",
+  description:
+    "Wijzigt bestaande taken op id (titel, coins, skill, schema, deadline-uur). Alleen meegegeven velden veranderen. " +
+    "Bij een ander schema of deadline worden open instances opnieuw door de app aangemaakt.",
+  inputSchema: { guildId, updates: z.array(taskUpdateSchema).min(1).max(200), dryRun },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+}, run((a) => fs.updateTasks(a)));
 
 server.registerTool("create_quest", {
   title: "Coop-quest aanmaken",

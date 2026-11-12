@@ -25,7 +25,7 @@ Optioneel: `RPG_ACTOR_UID` (wie in de activiteitenlog staat, standaard `mcp`).
 | Tool | Doet |
 |------|------|
 | `list_households` | guilds + leden (voor het `guildId`) |
-| `list_tasks` / `create_tasks` / `delete_tasks` | taak-templates, bulk aanmaken (dubbele titels worden overgeslagen) |
+| `list_tasks` / `create_tasks` / `update_tasks` / `delete_tasks` | taak-templates, bulk aanmaken (dubbele titels worden overgeslagen) en gedeeltelijk wijzigen |
 | `create_quest` | coop-quest met subtaken + bonus |
 | `list_shop_items` / `create_shop_items` / `archive_shop_items` | shop in bulk |
 
