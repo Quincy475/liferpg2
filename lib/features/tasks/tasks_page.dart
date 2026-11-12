@@ -1136,7 +1136,7 @@ class _CoopQuestsPanelState extends ConsumerState<_CoopQuestsPanel> {
   void initState() {
     super.initState();
     final saved = appBox.get(_prefKey);
-    _expanded = saved is bool ? saved : true;
+    _expanded = saved is bool ? saved : false;
   }
 
   void _toggle() {
