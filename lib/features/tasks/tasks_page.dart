@@ -9,6 +9,7 @@ import 'package:household_rpg/data/repositories/personal_task_repo.dart';
 import 'package:household_rpg/theme/app_theme.dart';
 
 enum TaskViewMode { board, week }
+
 enum TaskFilterMode { openClaimed, mine, unclaimed, late, all }
 
 class TasksPage extends ConsumerStatefulWidget {
@@ -26,20 +27,22 @@ class _TasksPageState extends ConsumerState<TasksPage> {
 
   DateTime get _weekStart {
     final d = _weekAnchor;
-    return DateTime(d.year, d.month, d.day).subtract(Duration(days: d.weekday - 1));
+    return DateTime(d.year, d.month, d.day)
+        .subtract(Duration(days: d.weekday - 1));
   }
 
-  DateTime get _weekEnd => _weekStart.add(const Duration(days: 6, hours: 23, minutes: 59));
+  DateTime get _weekEnd =>
+      _weekStart.add(const Duration(days: 6, hours: 23, minutes: 59));
 
   /// Helper om alle relevante task data te verversen
   Future<void> _manualRefresh(String guildId) async {
     // 1. Zorg dat de database up-to-date is (backend logica)
     await _refreshWeek(guildId: guildId);
-    
+
     // 2. Forceer Riverpod om de streams opnieuw te starten
     ref.invalidate(_templatesProvider(guildId));
     ref.invalidate(_weekInstancesProvider);
-    
+
     // 3. Reset bootstrap key zodat de volgende build niet onnodig refresht
     _lastBootstrapKey = '${guildId}_${_weekStart.toIso8601String()}';
   }
@@ -55,6 +58,16 @@ class _TasksPageState extends ConsumerState<TasksPage> {
         title: const Text('Deze week'),
         actions: [
           if (meAsync.value != null) _CoinChip(coins: meAsync.value!.coins),
+          IconButton(
+            tooltip: _viewMode == TaskViewMode.board ? 'Planner' : 'Board',
+            onPressed: () => setState(() => _viewMode =
+                _viewMode == TaskViewMode.board
+                    ? TaskViewMode.week
+                    : TaskViewMode.board),
+            icon: Icon(_viewMode == TaskViewMode.board
+                ? Icons.calendar_view_week
+                : Icons.view_agenda_outlined),
+          ),
           IconButton(
             tooltip: 'Nieuw template',
             onPressed: () {
@@ -76,7 +89,8 @@ class _TasksPageState extends ConsumerState<TasksPage> {
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('Error: $e')),
             data: (me) {
-              if (me == null) return const Center(child: Text('Geen user geladen'));
+              if (me == null)
+                return const Center(child: Text('Geen user geladen'));
 
               if (mode == AppMode.personal) {
                 return _buildPersonalContent(me);
@@ -88,72 +102,15 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                   children: [
                     EnterMotion(delayMs: 20, child: _headerControls()),
                     const Expanded(
-                      child: Center(child: Text('Maak of join eerst een koppel via het Menu.')),
+                      child: Center(
+                          child: Text(
+                              'Maak of join eerst een koppel via het Menu.')),
                     ),
                   ],
                 );
               }
 
-              _bootstrapWeek(guildId: me.guildId!);
-
-              final instancesAsync = ref.watch(_weekInstancesProvider((
-                guildId: me.guildId!,
-                start: _weekStart,
-                end: _weekEnd,
-              )));
-              final templatesAsync = ref.watch(_templatesProvider(me.guildId!));
-
-              final partner = ref.watch(partnerProvider);
-              final weekInstances = instancesAsync.value ?? const <TaskInstance>[];
-              return Column(
-                children: [
-                  EnterMotion(delayMs: 20, child: _headerControls(instances: weekInstances)),
-                  _StatsRow(
-                    together: me.weeklyPoints + (partner?.weeklyPoints ?? 0),
-                    instances: weekInstances,
-                  ),
-                  _CoopQuestsPanel(
-                    guildId: me.guildId!,
-                    weekStart: _weekStart,
-                    weekEnd: _weekEnd,
-                  ),
-                  Expanded(
-                    child: instancesAsync.when(
-                      loading: () => const Center(child: CircularProgressIndicator()),
-                      error: (e, _) => Center(child: Text('Error: $e')),
-                      data: (instances) {
-                        final loadedTemplates = templatesAsync.value;
-                        final live = loadedTemplates == null
-                            ? instances
-                            : instances.where((i) => loadedTemplates.any((t) => t.id == i.templateId)).toList();
-                        final filtered = _applyFilter(live, me.id, loadedTemplates ?? []);
-                        final board = _boardViewInstances(filtered);
-
-                        if (_viewMode == TaskViewMode.week) {
-                          return _PlannerView(
-                            instances: filtered,
-                            templates: templatesAsync.value ?? [],
-                            meId: me.id,
-                            onClaim: (id, tid) => _claim(me.guildId!, me.id, id, tid),
-                            onUnclaim: (id, tid) => _unclaim(me.guildId!, me.id, id, tid),
-                            onComplete: (id) => _complete(me.guildId!, me.id, id),
-                            onOpen: (instance) => _openTaskDetails(context, me.guildId!, instance),
-                          );
-                        }
-
-                        return _BoardList(
-                          instances: board,
-                          meId: me.id,
-                          onClaim: (id, tid) => _claim(me.guildId!, me.id, id, tid),
-                          onUnclaim: (id, tid) => _unclaim(me.guildId!, me.id, id, tid),
-                          onComplete: (id) => _complete(me.guildId!, me.id, id),
-                          onOpen: (instance) => _openTaskDetails(context, me.guildId!, instance),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              );
+              return _buildGuildContent(me);
             },
           ),
         ),
@@ -182,12 +139,17 @@ class _TasksPageState extends ConsumerState<TasksPage> {
               final loadedTemplates = templatesAsync.value;
               final live = loadedTemplates == null
                   ? instances
-                  : instances.where((i) => loadedTemplates.any((t) => t.id == i.templateId)).toList();
+                  : instances
+                      .where((i) =>
+                          loadedTemplates.any((t) => t.id == i.templateId))
+                      .toList();
               final board = _boardViewInstances(live);
 
               if (live.isEmpty) {
                 return const Center(
-                  child: Text('Nog geen persoonlijke taken.\nTik op + om er één aan te maken.', textAlign: TextAlign.center),
+                  child: Text(
+                      'Nog geen persoonlijke taken.\nTik op + om er één aan te maken.',
+                      textAlign: TextAlign.center),
                 );
               }
 
@@ -199,7 +161,8 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                   onClaim: (id, tid) async {},
                   onUnclaim: (id, tid) async {},
                   onComplete: (id) => _completePersonal(me.id, id),
-                  onOpen: (instance) => _openPersonalTaskDetails(context, me, instance),
+                  onOpen: (instance) =>
+                      _openPersonalTaskDetails(context, me, instance),
                   showClaim: false,
                 );
               }
@@ -210,7 +173,8 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                 onClaim: (id, tid) async {},
                 onUnclaim: (id, tid) async {},
                 onComplete: (id) => _completePersonal(me.id, id),
-                onOpen: (instance) => _openPersonalTaskDetails(context, me, instance),
+                onOpen: (instance) =>
+                    _openPersonalTaskDetails(context, me, instance),
                 showClaim: false,
               );
             },
@@ -219,54 +183,54 @@ class _TasksPageState extends ConsumerState<TasksPage> {
       ],
     );
   }
-List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
-  final byTemplate = <String, List<TaskInstance>>{};
 
-  for (final i in instances) {
-    byTemplate.putIfAbsent(i.templateId, () => []).add(i);
-  }
+  List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
+    final byTemplate = <String, List<TaskInstance>>{};
 
-  final today = DateTime.now();
-  final todayStart = DateTime(today.year, today.month, today.day);
-
-  final result = <TaskInstance>[];
-
-  for (final group in byTemplate.values) {
-    group.sort((a, b) => a.scheduledFor.compareTo(b.scheduledFor));
-
-    final pending = group
-        .where((e) => e.status != TaskInstanceStatus.completed)
-        .toList();
-
-    if (pending.isEmpty) {
-      result.add(group.last);
-      continue;
+    for (final i in instances) {
+      byTemplate.putIfAbsent(i.templateId, () => []).add(i);
     }
 
-    // 1. Vandaag eerst
-    final todayInst = pending.where((e) {
-      final d = e.scheduledFor;
-      return d.year == today.year &&
-          d.month == today.month &&
-          d.day == today.day;
-    }).firstOrNull;
+    final today = DateTime.now();
+    final todayStart = DateTime(today.year, today.month, today.day);
 
-    if (todayInst != null) {
-      result.add(todayInst);
-      continue;
+    final result = <TaskInstance>[];
+
+    for (final group in byTemplate.values) {
+      group.sort((a, b) => a.scheduledFor.compareTo(b.scheduledFor));
+
+      final pending =
+          group.where((e) => e.status != TaskInstanceStatus.completed).toList();
+
+      if (pending.isEmpty) {
+        result.add(group.last);
+        continue;
+      }
+
+      // 1. Vandaag eerst
+      final todayInst = pending.where((e) {
+        final d = e.scheduledFor;
+        return d.year == today.year &&
+            d.month == today.month &&
+            d.day == today.day;
+      }).firstOrNull;
+
+      if (todayInst != null) {
+        result.add(todayInst);
+        continue;
+      }
+
+      // 2. Anders eerstvolgende toekomst, anders laatste verleden
+      final future =
+          pending.where((e) => !e.scheduledFor.isBefore(todayStart)).toList();
+
+      result.add(future.isNotEmpty ? future.first : pending.last);
     }
 
-    // 2. Anders eerstvolgende toekomst, anders laatste verleden
-    final future = pending
-        .where((e) => !e.scheduledFor.isBefore(todayStart))
-        .toList();
-
-    result.add(future.isNotEmpty ? future.first : pending.last);
+    result.sort((a, b) => a.scheduledFor.compareTo(b.scheduledFor));
+    return result;
   }
 
-  result.sort((a, b) => a.scheduledFor.compareTo(b.scheduledFor));
-  return result;
-}
   void _bootstrapWeek({required String guildId}) {
     final key = '${guildId}_${_weekStart.toIso8601String()}';
     if (_lastBootstrapKey == key) return;
@@ -300,14 +264,17 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
 
   Future<void> _completePersonal(String uid, String instanceId) async {
     try {
-      await ref.read(personalTaskRepoProvider).completeInstance(uid: uid, instanceId: instanceId);
+      await ref
+          .read(personalTaskRepoProvider)
+          .completeInstance(uid: uid, instanceId: instanceId);
       ref.invalidate(_personalWeekInstancesProvider);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Persoonlijke taak voltooid + XP + solo coins.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Persoonlijke taak voltooid + XP + solo coins.')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Mislukt: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Mislukt: $e')));
     }
   }
 
@@ -316,10 +283,14 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
     UserProfile me,
     TaskInstance instance,
   ) async {
-    final templates = await ref.read(personalTaskRepoProvider).watchTemplates(me.id).first;
+    final templates =
+        await ref.read(personalTaskRepoProvider).watchTemplates(me.id).first;
     TaskTemplate? template;
     for (final t in templates) {
-      if (t.id == instance.templateId) { template = t; break; }
+      if (t.id == instance.templateId) {
+        template = t;
+        break;
+      }
     }
     if (template == null) return;
 
@@ -352,7 +323,8 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
             icon: const Icon(Icons.edit),
             label: const Text('Edit'),
           ),
-          FilledButton(onPressed: () => Navigator.pop(c), child: const Text('Sluiten')),
+          FilledButton(
+              onPressed: () => Navigator.pop(c), child: const Text('Sluiten')),
         ],
       ),
     );
@@ -365,11 +337,13 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
   }) async {
     final titleC = TextEditingController(text: existing?.title ?? '');
     final descC = TextEditingController(text: existing?.description ?? '');
-    final coinC = TextEditingController(text: (existing?.coinsBase ?? 5).toString());
+    final coinC =
+        TextEditingController(text: (existing?.coinsBase ?? 5).toString());
     SkillType skill = existing?.skillType ?? SkillType.cooking;
-    TaskScheduleType schedule = (existing?.scheduleType == TaskScheduleType.custom || existing == null)
-        ? TaskScheduleType.daily
-        : existing!.scheduleType;
+    TaskScheduleType schedule =
+        (existing?.scheduleType == TaskScheduleType.custom || existing == null)
+            ? TaskScheduleType.daily
+            : existing!.scheduleType;
     bool isOneTime = existing?.isRepeatable == false;
     int dueHour = existing?.dueHour ?? 22;
     DateTime scheduledDate = existing?.scheduledDate ?? DateTime.now();
@@ -390,21 +364,29 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TextField(controller: titleC, decoration: const InputDecoration(labelText: 'Titel')),
+                TextField(
+                    controller: titleC,
+                    decoration: const InputDecoration(labelText: 'Titel')),
                 const SizedBox(height: 10),
-                TextField(controller: descC, decoration: const InputDecoration(labelText: 'Beschrijving')),
+                TextField(
+                    controller: descC,
+                    decoration:
+                        const InputDecoration(labelText: 'Beschrijving')),
                 const SizedBox(height: 10),
                 TextField(
                   controller: coinC,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Solo coins (beloning)'),
+                  decoration:
+                      const InputDecoration(labelText: 'Solo coins (beloning)'),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<SkillType>(
                   value: skill,
-                  decoration: const InputDecoration(labelText: 'Vaardigheid (XP)'),
+                  decoration:
+                      const InputDecoration(labelText: 'Vaardigheid (XP)'),
                   items: SkillType.values
-                      .map((s) => DropdownMenuItem(value: s, child: Text(s.label)))
+                      .map((s) =>
+                          DropdownMenuItem(value: s, child: Text(s.label)))
                       .toList(),
                   onChanged: (v) => setS(() => skill = v ?? SkillType.cooking),
                 ),
@@ -419,14 +401,17 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Datum'),
-                    subtitle: Text(DateFormat('EEE d MMM yyyy').format(scheduledDate)),
+                    subtitle: Text(
+                        DateFormat('EEE d MMM yyyy').format(scheduledDate)),
                     trailing: const Icon(Icons.calendar_today),
                     onTap: () async {
                       final picked = await showDatePicker(
                         context: c,
                         initialDate: scheduledDate,
-                        firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                        lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
+                        firstDate:
+                            DateTime.now().subtract(const Duration(days: 365)),
+                        lastDate:
+                            DateTime.now().add(const Duration(days: 365 * 2)),
                       );
                       if (picked != null) setS(() => scheduledDate = picked);
                     },
@@ -437,9 +422,11 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
                     value: schedule,
                     decoration: const InputDecoration(labelText: 'Herhaling'),
                     items: scheduleLabels.entries
-                        .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                        .map((e) => DropdownMenuItem(
+                            value: e.key, child: Text(e.value)))
                         .toList(),
-                    onChanged: (v) => setS(() => schedule = v ?? TaskScheduleType.daily),
+                    onChanged: (v) =>
+                        setS(() => schedule = v ?? TaskScheduleType.daily),
                   ),
                 ],
                 const SizedBox(height: 16),
@@ -450,7 +437,8 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
                     IconButton(
                       visualDensity: VisualDensity.compact,
                       icon: const Icon(Icons.remove),
-                      onPressed: () => setS(() => dueHour = (dueHour - 1).clamp(0, 23)),
+                      onPressed: () =>
+                          setS(() => dueHour = (dueHour - 1).clamp(0, 23)),
                     ),
                     SizedBox(
                       width: 52,
@@ -463,7 +451,8 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
                     IconButton(
                       visualDensity: VisualDensity.compact,
                       icon: const Icon(Icons.add),
-                      onPressed: () => setS(() => dueHour = (dueHour + 1).clamp(0, 23)),
+                      onPressed: () =>
+                          setS(() => dueHour = (dueHour + 1).clamp(0, 23)),
                     ),
                   ],
                 ),
@@ -476,8 +465,12 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
                 onPressed: () => Navigator.pop(c, 'delete'),
                 child: const Text('Verwijderen'),
               ),
-            TextButton(onPressed: () => Navigator.pop(c, 'cancel'), child: const Text('Annuleren')),
-            FilledButton(onPressed: () => Navigator.pop(c, 'save'), child: const Text('Opslaan')),
+            TextButton(
+                onPressed: () => Navigator.pop(c, 'cancel'),
+                child: const Text('Annuleren')),
+            FilledButton(
+                onPressed: () => Navigator.pop(c, 'save'),
+                child: const Text('Opslaan')),
           ],
         ),
       ),
@@ -486,8 +479,12 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
     if (action == null || action == 'cancel') return;
 
     if (action == 'delete' && existing != null) {
-      await ref.read(personalTaskRepoProvider).archiveTemplate(uid: me.id, templateId: existing.id);
-      await ref.read(personalTaskRepoProvider).removeOpenInstancesForTemplate(uid: me.id, templateId: existing.id);
+      await ref
+          .read(personalTaskRepoProvider)
+          .archiveTemplate(uid: me.id, templateId: existing.id);
+      await ref
+          .read(personalTaskRepoProvider)
+          .removeOpenInstancesForTemplate(uid: me.id, templateId: existing.id);
       _lastBootstrapKey = '';
       ref.invalidate(_personalTemplatesProvider(me.id));
       ref.invalidate(_personalWeekInstancesProvider);
@@ -510,9 +507,13 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
     );
 
     if (existing == null) {
-      await ref.read(personalTaskRepoProvider).createTemplate(uid: me.id, input: input);
+      await ref
+          .read(personalTaskRepoProvider)
+          .createTemplate(uid: me.id, input: input);
     } else {
-      await ref.read(personalTaskRepoProvider).updateTemplate(uid: me.id, input: input);
+      await ref
+          .read(personalTaskRepoProvider)
+          .updateTemplate(uid: me.id, input: input);
     }
 
     // Forceer re-bootstrap zodat nieuwe instanties worden aangemaakt
@@ -529,7 +530,54 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
   }
 
   Widget _headerControls({List<TaskInstance> instances = const []}) {
+    return Column(
+      children: [
+        _headerTop(instances: instances),
+        const SizedBox(height: 8),
+        _filterBar(),
+        const SizedBox(height: 6),
+      ],
+    );
+  }
+
+  /// Modus-toggle + weekstrook (scrolt mee met de pagina).
+  Widget _headerTop({List<TaskInstance> instances = const []}) {
     final mode = ref.watch(appModeProvider);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+      child: Column(
+        children: [
+          SegmentedButton<AppMode>(
+            segments: const [
+              ButtonSegment(
+                  value: AppMode.guild,
+                  label: Text('Samen'),
+                  icon: Icon(Icons.group, size: 16)),
+              ButtonSegment(
+                  value: AppMode.personal,
+                  label: Text('Persoonlijk'),
+                  icon: Icon(Icons.person, size: 16)),
+            ],
+            selected: {mode},
+            onSelectionChanged: (v) =>
+                ref.read(appModeProvider.notifier).state = v.first,
+          ),
+          const SizedBox(height: 10),
+          _WeekStrip(
+            weekStart: _weekStart,
+            instances: instances,
+            onPrev: () => setState(() =>
+                _weekAnchor = _weekAnchor.subtract(const Duration(days: 7))),
+            onNext: () => setState(
+                () => _weekAnchor = _weekAnchor.add(const Duration(days: 7))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Filterchips; blijft bovenaan staan terwijl de lijst scrolt.
+  Widget _filterBar() {
     Widget chip(String label, TaskFilterMode m) => Padding(
           padding: const EdgeInsets.only(right: 8),
           child: ChoiceChip(
@@ -538,123 +586,262 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
             onSelected: (_) => setState(() => _filterMode = m),
           ),
         );
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-      child: Column(
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Row(
         children: [
-          // Modus toggle: Guild | Persoonlijk
-          SegmentedButton<AppMode>(
-            segments: const [
-              ButtonSegment(value: AppMode.guild, label: Text('Samen'), icon: Icon(Icons.group, size: 16)),
-              ButtonSegment(value: AppMode.personal, label: Text('Persoonlijk'), icon: Icon(Icons.person, size: 16)),
-            ],
-            selected: {mode},
-            onSelectionChanged: (v) => ref.read(appModeProvider.notifier).state = v.first,
-          ),
-          const SizedBox(height: 10),
-          _WeekStrip(
-            weekStart: _weekStart,
-            instances: instances,
-            onPrev: () => setState(() => _weekAnchor = _weekAnchor.subtract(const Duration(days: 7))),
-            onNext: () => setState(() => _weekAnchor = _weekAnchor.add(const Duration(days: 7))),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      chip('Open', TaskFilterMode.openClaimed),
-                      chip('Van mij', TaskFilterMode.mine),
-                      chip('Vrij', TaskFilterMode.unclaimed),
-                      chip('Te laat', TaskFilterMode.late),
-                      chip('Alle', TaskFilterMode.all),
-                    ],
-                  ),
-                ),
-              ),
-              SegmentedButton<TaskViewMode>(
-                showSelectedIcon: false,
-                style: const ButtonStyle(visualDensity: VisualDensity.compact),
-                segments: const [
-                  ButtonSegment(value: TaskViewMode.board, icon: Icon(Icons.view_agenda_outlined, size: 18)),
-                  ButtonSegment(value: TaskViewMode.week, icon: Icon(Icons.calendar_view_week, size: 18)),
-                ],
-                selected: {_viewMode},
-                onSelectionChanged: (v) => setState(() => _viewMode = v.first),
-              ),
-            ],
-          ),
+          chip('Open', TaskFilterMode.openClaimed),
+          chip('Van mij', TaskFilterMode.mine),
+          chip('Vrij', TaskFilterMode.unclaimed),
+          chip('Te laat', TaskFilterMode.late),
+          chip('Alle', TaskFilterMode.all),
         ],
       ),
     );
   }
 
-  List<TaskInstance> _applyFilter(
-  List<TaskInstance> all,
-  String meId,
-  List<TaskTemplate> templates,
-) {
-  final now = DateTime.now();
-  final todayStart = DateTime(now.year, now.month, now.day);
+  /// Guild-modus: één scrollende pagina. Quests (uitklapbaar, met subtaken) en daaronder
+  /// de losse taken; alleen de filterbalk blijft vast staan.
+  Widget _buildGuildContent(UserProfile me) {
+    final guildId = me.guildId!;
+    _bootstrapWeek(guildId: guildId);
 
-  List<TaskInstance> filtered;
+    final instancesAsync = ref.watch(_weekInstancesProvider((
+      guildId: guildId,
+      start: _weekStart,
+      end: _weekEnd,
+    )));
+    final templatesAsync = ref.watch(_templatesProvider(guildId));
+    final groups =
+        ref.watch(_coopGroupsProvider(guildId)).value ?? const <TaskGroup>[];
+    final partner = ref.watch(partnerProvider);
+    final together = me.weeklyPoints + (partner?.weeklyPoints ?? 0);
 
-  switch (_filterMode) {
-    case TaskFilterMode.openClaimed:
-      filtered = all.where((i) =>
-        i.status == TaskInstanceStatus.open ||
-        i.status == TaskInstanceStatus.claimed).toList();
-      break;
+    return instancesAsync.when(
+      loading: () => Column(
+        children: [
+          _headerControls(),
+          const Expanded(child: Center(child: CircularProgressIndicator())),
+        ],
+      ),
+      error: (e, _) => Center(child: Text('Error: $e')),
+      data: (instances) {
+        final loadedTemplates = templatesAsync.value;
+        final live = loadedTemplates == null
+            ? instances
+            : instances
+                .where((i) => loadedTemplates.any((t) => t.id == i.templateId))
+                .toList();
+        final filtered = _applyFilter(live, me.id, loadedTemplates ?? []);
 
-    case TaskFilterMode.mine:
-      filtered = all.where((i) {
-        if (i.claimedByUserId != meId ||
-            i.status != TaskInstanceStatus.claimed) return false;
+        Future<void> onClaim(String id, String tid) =>
+            _claim(guildId, me.id, id, tid);
+        Future<void> onUnclaim(String id, String tid) =>
+            _unclaim(guildId, me.id, id, tid);
+        Future<void> onComplete(String id) => _complete(guildId, me.id, id);
+        Future<void> onOpen(TaskInstance i) =>
+            _openTaskDetails(context, guildId, i);
 
-        final tmpl = templates.where((t) => t.id == i.templateId).firstOrNull;
-
-        if (tmpl?.isRepeatable == true) {
-          return !i.scheduledFor.isBefore(todayStart);
+        if (_viewMode == TaskViewMode.week) {
+          return Column(
+            children: [
+              _headerControls(instances: live),
+              _StatsRow(together: together, instances: live),
+              _CoopQuestsPanel(
+                  guildId: guildId, weekStart: _weekStart, weekEnd: _weekEnd),
+              Expanded(
+                child: _PlannerView(
+                  instances: filtered,
+                  templates: loadedTemplates ?? [],
+                  meId: me.id,
+                  onClaim: onClaim,
+                  onUnclaim: onUnclaim,
+                  onComplete: onComplete,
+                  onOpen: onOpen,
+                ),
+              ),
+            ],
+          );
         }
-        return true;
-      }).toList();
-      break;
 
-    case TaskFilterMode.unclaimed:
-      filtered = all.where((i) {
-        if (i.claimedByUserId != null ||
-            i.status != TaskInstanceStatus.open) return false;
-
-        final tmpl = templates.where((t) => t.id == i.templateId).firstOrNull;
-
-        if (tmpl?.isRepeatable == true) {
-          return !i.scheduledFor.isBefore(todayStart);
+        final groupIds = groups.map((g) => g.id).toSet();
+        final byGroup = <String, List<TaskInstance>>{};
+        for (final i in live) {
+          final gid = i.groupId;
+          if (gid == null || gid.isEmpty) continue;
+          if (i.status == TaskInstanceStatus.missed ||
+              i.status == TaskInstanceStatus.expired) continue;
+          byGroup.putIfAbsent(gid, () => []).add(i);
         }
-        return true;
-      }).toList();
-      break;
+        // Een quest is zichtbaar als minstens één subtaak door het filter komt.
+        final visibleGroupIds =
+            filtered.map((i) => i.groupId).whereType<String>().toSet();
+        final quests = groups
+            .where((g) =>
+                visibleGroupIds.contains(g.id) &&
+                (byGroup[g.id]?.isNotEmpty ?? false))
+            .toList();
+        final loose = _boardViewInstances(filtered)
+            .where((i) => i.groupId == null || !groupIds.contains(i.groupId))
+            .toList();
 
-    case TaskFilterMode.late:
-      return all.where((i) {
-        final tmpl = templates.where((t) => t.id == i.templateId).firstOrNull;
-
-        if (tmpl?.isRepeatable != false) return false;
-
-        return i.status == TaskInstanceStatus.missed ||
-            ((i.status == TaskInstanceStatus.open ||
-                    i.status == TaskInstanceStatus.claimed) &&
-                i.dueAt.isBefore(now));
-      }).toList();
-
-    case TaskFilterMode.all:
-      return all;
+        final bg = Theme.of(context).scaffoldBackgroundColor;
+        return RefreshIndicator(
+          onRefresh: () => _manualRefresh(guildId),
+          child: CustomScrollView(
+            physics: const BouncingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics()),
+            slivers: [
+              SliverToBoxAdapter(child: _headerTop(instances: live)),
+              const SliverToBoxAdapter(child: SizedBox(height: 10)),
+              SliverToBoxAdapter(
+                  child: _StatsRow(together: together, instances: live)),
+              SliverPersistentHeader(
+                pinned: true,
+                delegate:
+                    _PinnedBar(height: 52, color: bg, child: _filterBar()),
+              ),
+              if (quests.isNotEmpty) ...[
+                SliverToBoxAdapter(
+                    child: _SectionLabel(
+                        title: 'Coöp-quests', count: quests.length)),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  sliver: SliverList.builder(
+                    itemCount: quests.length,
+                    itemBuilder: (context, idx) {
+                      final g = quests[idx];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: EnterMotion(
+                          key: ValueKey('quest_${g.id}'),
+                          delayMs: 40 + (idx < 6 ? idx : 6) * 30,
+                          child: _QuestCard(
+                            key: ValueKey(g.id),
+                            group: g,
+                            instances: byGroup[g.id]!,
+                            meId: me.id,
+                            onComplete: onComplete,
+                            onOpen: onOpen,
+                            onEdit: () =>
+                                _editGroupFlow(context, ref, guildId, g),
+                            onDelete: () =>
+                                _deleteGroupFlow(context, ref, guildId, g),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+              if (loose.isNotEmpty) ...[
+                SliverToBoxAdapter(
+                  child: _SectionLabel(
+                    title: quests.isEmpty ? 'Taken' : 'Losse taken',
+                    count: loose.length,
+                  ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  sliver: SliverList.builder(
+                    itemCount: loose.length,
+                    itemBuilder: (context, idx) {
+                      final i = loose[idx];
+                      return EnterMotion(
+                        key: ValueKey(i.id),
+                        delayMs: 40 + (idx < 8 ? idx : 8) * 28,
+                        child: _TaskCard(
+                          i: i,
+                          meId: me.id,
+                          onClaim: onClaim,
+                          onUnclaim: onUnclaim,
+                          onComplete: onComplete,
+                          onOpen: () => onOpen(i),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+              if (quests.isEmpty && loose.isEmpty)
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: Text('Geen taken voor deze week.')),
+                ),
+              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            ],
+          ),
+        );
+      },
+    );
   }
 
-  return _pickRelevantPerTemplate(filtered);
-}
+  List<TaskInstance> _applyFilter(
+    List<TaskInstance> all,
+    String meId,
+    List<TaskTemplate> templates,
+  ) {
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+
+    List<TaskInstance> filtered;
+
+    switch (_filterMode) {
+      case TaskFilterMode.openClaimed:
+        filtered = all
+            .where((i) =>
+                i.status == TaskInstanceStatus.open ||
+                i.status == TaskInstanceStatus.claimed)
+            .toList();
+        break;
+
+      case TaskFilterMode.mine:
+        filtered = all.where((i) {
+          if (i.claimedByUserId != meId ||
+              i.status != TaskInstanceStatus.claimed) return false;
+
+          final tmpl = templates.where((t) => t.id == i.templateId).firstOrNull;
+
+          if (tmpl?.isRepeatable == true) {
+            return !i.scheduledFor.isBefore(todayStart);
+          }
+          return true;
+        }).toList();
+        break;
+
+      case TaskFilterMode.unclaimed:
+        filtered = all.where((i) {
+          if (i.claimedByUserId != null || i.status != TaskInstanceStatus.open)
+            return false;
+
+          final tmpl = templates.where((t) => t.id == i.templateId).firstOrNull;
+
+          if (tmpl?.isRepeatable == true) {
+            return !i.scheduledFor.isBefore(todayStart);
+          }
+          return true;
+        }).toList();
+        break;
+
+      case TaskFilterMode.late:
+        return all.where((i) {
+          final tmpl = templates.where((t) => t.id == i.templateId).firstOrNull;
+
+          if (tmpl?.isRepeatable != false) return false;
+
+          return i.status == TaskInstanceStatus.missed ||
+              ((i.status == TaskInstanceStatus.open ||
+                      i.status == TaskInstanceStatus.claimed) &&
+                  i.dueAt.isBefore(now));
+        }).toList();
+
+      case TaskFilterMode.all:
+        return all;
+    }
+
+    return _pickRelevantPerTemplate(filtered);
+  }
 
   List<TaskInstance> _boardViewInstances(List<TaskInstance> instances) {
     final byTemplate = <String, List<TaskInstance>>{};
@@ -668,18 +855,28 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
     final out = <TaskInstance>[];
     for (final group in byTemplate.values) {
       group.sort((a, b) => a.scheduledFor.compareTo(b.scheduledFor));
-      final pending = group.where((e) => e.status != TaskInstanceStatus.completed).toList();
-      if (pending.isEmpty) { out.add(group.last); continue; }
+      final pending =
+          group.where((e) => e.status != TaskInstanceStatus.completed).toList();
+      if (pending.isEmpty) {
+        out.add(group.last);
+        continue;
+      }
 
       // 1. Vandaag
       final todayInst = pending.where((e) {
         final d = e.scheduledFor;
-        return d.year == today.year && d.month == today.month && d.day == today.day;
+        return d.year == today.year &&
+            d.month == today.month &&
+            d.day == today.day;
       }).firstOrNull;
-      if (todayInst != null) { out.add(todayInst); continue; }
+      if (todayInst != null) {
+        out.add(todayInst);
+        continue;
+      }
 
       // 2. Eerstvolgende toekomstige, anders meest recente verleden
-      final future = pending.where((e) => !e.scheduledFor.isBefore(todayStart)).toList();
+      final future =
+          pending.where((e) => !e.scheduledFor.isBefore(todayStart)).toList();
       out.add(future.isNotEmpty ? future.first : pending.last);
     }
 
@@ -687,7 +884,8 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
     return out;
   }
 
-  Future<void> _claim(String guildId, String meId, String instanceId, String templateId) async {
+  Future<void> _claim(
+      String guildId, String meId, String instanceId, String templateId) async {
     final templates = ref.read(_templatesProvider(guildId)).value ?? [];
     final tmpl = templates.where((t) => t.id == templateId).firstOrNull;
 
@@ -697,7 +895,8 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
         context: context,
         builder: (c) => AlertDialog(
           title: const Text('Claimen'),
-          content: const Text('Wil je alleen deze taak claimen of alle toekomstige?'),
+          content: const Text(
+              'Wil je alleen deze taak claimen of alle toekomstige?'),
           actions: [
             OutlinedButton(
               onPressed: () => Navigator.pop(c, false),
@@ -717,25 +916,32 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
     try {
       if (claimAll) {
         await ref.read(taskMvpRepoProvider).claimAllFutureInstances(
-          guildId: guildId, templateId: templateId, userId: meId,
-        );
+              guildId: guildId,
+              templateId: templateId,
+              userId: meId,
+            );
       } else {
         await ref.read(taskMvpRepoProvider).claimInstance(
-          guildId: guildId, instanceId: instanceId, userId: meId,
-        );
+              guildId: guildId,
+              instanceId: instanceId,
+              userId: meId,
+            );
       }
       ref.invalidate(_weekInstancesProvider);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(claimAll ? 'Alle toekomstige taken geclaimd.' : 'Task geclaimd.'),
+        content: Text(
+            claimAll ? 'Alle toekomstige taken geclaimd.' : 'Task geclaimd.'),
       ));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Claim mislukt: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Claim mislukt: $e')));
     }
   }
 
-  Future<void> _unclaim(String guildId, String meId, String instanceId, String templateId) async {
+  Future<void> _unclaim(
+      String guildId, String meId, String instanceId, String templateId) async {
     final templates = ref.read(_templatesProvider(guildId)).value ?? [];
     final tmpl = templates.where((t) => t.id == templateId).firstOrNull;
 
@@ -745,7 +951,8 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
         context: context,
         builder: (c) => AlertDialog(
           title: const Text('Unclaimen'),
-          content: const Text('Wil je alleen deze taak unclaimen of alle toekomstige?'),
+          content: const Text(
+              'Wil je alleen deze taak unclaimen of alle toekomstige?'),
           actions: [
             OutlinedButton(
               onPressed: () => Navigator.pop(c, false),
@@ -765,38 +972,50 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
     try {
       if (unclaimAll) {
         await ref.read(taskMvpRepoProvider).unclaimAllFutureInstances(
-          guildId: guildId, templateId: templateId, userId: meId,
-        );
+              guildId: guildId,
+              templateId: templateId,
+              userId: meId,
+            );
       } else {
         await ref.read(taskMvpRepoProvider).unclaimInstance(
-          guildId: guildId, instanceId: instanceId, userId: meId,
-        );
+              guildId: guildId,
+              instanceId: instanceId,
+              userId: meId,
+            );
       }
       ref.invalidate(_weekInstancesProvider);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(unclaimAll ? 'Alle toekomstige taken unclaimed.' : 'Task unclaimed.'),
+        content: Text(unclaimAll
+            ? 'Alle toekomstige taken unclaimed.'
+            : 'Task unclaimed.'),
       ));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Unclaim mislukt: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Unclaim mislukt: $e')));
     }
   }
 
   Future<void> _complete(String guildId, String meId, String instanceId) async {
     try {
-      await ref.read(taskMvpRepoProvider).completeInstance(guildId: guildId, instanceId: instanceId, userId: meId);
+      await ref.read(taskMvpRepoProvider).completeInstance(
+          guildId: guildId, instanceId: instanceId, userId: meId);
       ref.invalidate(_weekInstancesProvider);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task voltooid + coins.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Task voltooid + coins.')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Complete mislukt: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Complete mislukt: $e')));
     }
   }
 
-  Future<void> _openTaskDetails(BuildContext context, String guildId, TaskInstance instance) async {
-    final templates = await ref.read(taskMvpRepoProvider).watchTemplates(guildId).first;
+  Future<void> _openTaskDetails(
+      BuildContext context, String guildId, TaskInstance instance) async {
+    final templates =
+        await ref.read(taskMvpRepoProvider).watchTemplates(guildId).first;
 
     TaskTemplate? template;
     for (final t in templates) {
@@ -807,7 +1026,8 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
     }
     if (template == null) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Template niet gevonden.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Template niet gevonden.')));
       return;
     }
 
@@ -822,7 +1042,8 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Description', style: Theme.of(context).textTheme.labelLarge),
+                Text('Description',
+                    style: Theme.of(context).textTheme.labelLarge),
                 const SizedBox(height: 6),
                 Text(
                   template.description.trim().isEmpty
@@ -830,7 +1051,8 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
                       : template.description,
                 ),
                 const SizedBox(height: 12),
-                Text('Schedule: ${template.scheduleType.name} • interval ${template.intervalValue}'),
+                Text(
+                    'Schedule: ${template.scheduleType.name} • interval ${template.intervalValue}'),
                 const SizedBox(height: 4),
                 Text('Coins: ${template.coinsBase}'),
               ],
@@ -840,7 +1062,8 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
             OutlinedButton.icon(
               onPressed: () {
                 Navigator.pop(dialogContext);
-                _openTemplateEditDialog(context, existing: template, allowDelete: true);
+                _openTemplateEditDialog(context,
+                    existing: template, allowDelete: true);
               },
               icon: const Icon(Icons.edit),
               label: const Text('Edit'),
@@ -865,18 +1088,25 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
 
     final titleC = TextEditingController(text: existing?.title ?? '');
     final descC = TextEditingController(text: existing?.description ?? '');
-    final coinC = TextEditingController(text: (existing?.coinsBase ?? 2).toString());
-    final intervalC = TextEditingController(text: (existing?.intervalValue ?? 1).toString());
-    final isExistingOneTime = existing?.scheduleType == TaskScheduleType.custom || existing?.isRepeatable == false;
-    TaskScheduleType schedule = (existing?.scheduleType == TaskScheduleType.custom || existing?.scheduleType == null)
-        ? TaskScheduleType.daily
-        : existing!.scheduleType;
+    final coinC =
+        TextEditingController(text: (existing?.coinsBase ?? 2).toString());
+    final intervalC =
+        TextEditingController(text: (existing?.intervalValue ?? 1).toString());
+    final isExistingOneTime =
+        existing?.scheduleType == TaskScheduleType.custom ||
+            existing?.isRepeatable == false;
+    TaskScheduleType schedule =
+        (existing?.scheduleType == TaskScheduleType.custom ||
+                existing?.scheduleType == null)
+            ? TaskScheduleType.daily
+            : existing!.scheduleType;
     bool isOneTime = isExistingOneTime;
     int dueHour = existing?.dueHour ?? 22;
     DateTime scheduledDate = existing?.scheduledDate ?? DateTime.now();
 
     // Coöp-quest (taakgroep) + skill
-    final groups = await ref.read(taskMvpRepoProvider).watchGroups(me.guildId!).first;
+    final groups =
+        await ref.read(taskMvpRepoProvider).watchGroups(me.guildId!).first;
     String existingGroupName = '';
     if (existing?.groupId != null) {
       final g = groups.where((g) => g.id == existing!.groupId).toList();
@@ -896,14 +1126,20 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
       context: context,
       builder: (c) => StatefulBuilder(
         builder: (c, setS) => AlertDialog(
-          title: Text(existing == null ? 'Nieuw task template' : 'Task bewerken'),
+          title:
+              Text(existing == null ? 'Nieuw task template' : 'Task bewerken'),
           content: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TextField(controller: titleC, decoration: const InputDecoration(labelText: 'Titel')),
+                TextField(
+                    controller: titleC,
+                    decoration: const InputDecoration(labelText: 'Titel')),
                 const SizedBox(height: 10),
-                TextField(controller: descC, decoration: const InputDecoration(labelText: 'Beschrijving')),
+                TextField(
+                    controller: descC,
+                    decoration:
+                        const InputDecoration(labelText: 'Beschrijving')),
                 const SizedBox(height: 10),
                 TextField(
                   controller: coinC,
@@ -915,17 +1151,21 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
                   controller: groupC,
                   decoration: const InputDecoration(
                     labelText: 'Coöp-quest (optioneel)',
-                    helperText: 'Subtaken met dezelfde naam horen bij één grote klus',
+                    helperText:
+                        'Subtaken met dezelfde naam horen bij één grote klus',
                   ),
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<SkillType?>(
                   value: selectedSkill,
-                  decoration: const InputDecoration(labelText: 'Skill (optioneel)'),
+                  decoration:
+                      const InputDecoration(labelText: 'Skill (optioneel)'),
                   items: [
-                    const DropdownMenuItem<SkillType?>(value: null, child: Text('Geen')),
+                    const DropdownMenuItem<SkillType?>(
+                        value: null, child: Text('Geen')),
                     ...SkillType.values.map(
-                      (s) => DropdownMenuItem<SkillType?>(value: s, child: Text(s.name)),
+                      (s) => DropdownMenuItem<SkillType?>(
+                          value: s, child: Text(s.name)),
                     ),
                   ],
                   onChanged: (v) => setS(() => selectedSkill = v),
@@ -934,7 +1174,8 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Eenmalig'),
-                  subtitle: const Text('Task wordt slechts één keer aangemaakt'),
+                  subtitle:
+                      const Text('Task wordt slechts één keer aangemaakt'),
                   value: isOneTime,
                   onChanged: (v) => setS(() => isOneTime = v),
                 ),
@@ -943,14 +1184,17 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Datum'),
-                    subtitle: Text(DateFormat('EEE d MMM yyyy').format(scheduledDate)),
+                    subtitle: Text(
+                        DateFormat('EEE d MMM yyyy').format(scheduledDate)),
                     trailing: const Icon(Icons.calendar_today),
                     onTap: () async {
                       final picked = await showDatePicker(
                         context: c,
                         initialDate: scheduledDate,
-                        firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                        lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
+                        firstDate:
+                            DateTime.now().subtract(const Duration(days: 365)),
+                        lastDate:
+                            DateTime.now().add(const Duration(days: 365 * 2)),
                       );
                       if (picked != null) setS(() => scheduledDate = picked);
                     },
@@ -962,16 +1206,19 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
                     value: schedule,
                     decoration: const InputDecoration(labelText: 'Herhaling'),
                     items: scheduleLabels.entries
-                        .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                        .map((e) => DropdownMenuItem(
+                            value: e.key, child: Text(e.value)))
                         .toList(),
-                    onChanged: (v) => setS(() => schedule = v ?? TaskScheduleType.daily),
+                    onChanged: (v) =>
+                        setS(() => schedule = v ?? TaskScheduleType.daily),
                   ),
                   if (schedule == TaskScheduleType.everyXDays) ...[
                     const SizedBox(height: 10),
                     TextField(
                       controller: intervalC,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Elke X dagen'),
+                      decoration:
+                          const InputDecoration(labelText: 'Elke X dagen'),
                     ),
                   ],
                 ],
@@ -983,7 +1230,8 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
                     IconButton(
                       visualDensity: VisualDensity.compact,
                       icon: const Icon(Icons.remove),
-                      onPressed: () => setS(() => dueHour = (dueHour - 1).clamp(0, 23)),
+                      onPressed: () =>
+                          setS(() => dueHour = (dueHour - 1).clamp(0, 23)),
                     ),
                     SizedBox(
                       width: 52,
@@ -996,7 +1244,8 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
                     IconButton(
                       visualDensity: VisualDensity.compact,
                       icon: const Icon(Icons.add),
-                      onPressed: () => setS(() => dueHour = (dueHour + 1).clamp(0, 23)),
+                      onPressed: () =>
+                          setS(() => dueHour = (dueHour + 1).clamp(0, 23)),
                     ),
                   ],
                 ),
@@ -1009,8 +1258,12 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
                 onPressed: () => Navigator.pop(c, 'delete'),
                 child: const Text('Delete'),
               ),
-            TextButton(onPressed: () => Navigator.pop(c, 'cancel'), child: const Text('Annuleren')),
-            FilledButton(onPressed: () => Navigator.pop(c, 'save'), child: const Text('Opslaan')),
+            TextButton(
+                onPressed: () => Navigator.pop(c, 'cancel'),
+                child: const Text('Annuleren')),
+            FilledButton(
+                onPressed: () => Navigator.pop(c, 'save'),
+                child: const Text('Opslaan')),
           ],
         ),
       ),
@@ -1020,11 +1273,14 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
 
     if (action == 'delete' && existing != null) {
       await ref.read(taskMvpRepoProvider).archiveTemplate(
-        guildId: me.guildId!, templateId: existing.id, actorUserId: me.id,
-      );
+            guildId: me.guildId!,
+            templateId: existing.id,
+            actorUserId: me.id,
+          );
       await ref.read(taskMvpRepoProvider).removeOpenInstancesForTemplate(
-        guildId: me.guildId!, templateId: existing.id,
-      );
+            guildId: me.guildId!,
+            templateId: existing.id,
+          );
       await _manualRefresh(me.guildId!);
       return;
     }
@@ -1033,13 +1289,19 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
     String? resolvedGroupId;
     final gname = groupC.text.trim();
     if (gname.isNotEmpty) {
-      final match = groups.where((g) => g.title.toLowerCase() == gname.toLowerCase()).toList();
+      final match = groups
+          .where((g) => g.title.toLowerCase() == gname.toLowerCase())
+          .toList();
       if (match.isNotEmpty) {
         resolvedGroupId = match.first.id;
       } else {
         resolvedGroupId = await ref.read(taskMvpRepoProvider).createGroup(
               guildId: me.guildId!,
-              input: TaskGroup(id: '', title: gname, skillType: selectedSkill, bonusCoins: 0),
+              input: TaskGroup(
+                  id: '',
+                  title: gname,
+                  skillType: selectedSkill,
+                  bonusCoins: 0),
               actorUserId: me.id,
             );
       }
@@ -1063,15 +1325,17 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
     );
 
     if (existing == null) {
-      await ref.read(taskMvpRepoProvider).createTemplate(guildId: me.guildId!, input: input, actorUserId: me.id);
+      await ref.read(taskMvpRepoProvider).createTemplate(
+          guildId: me.guildId!, input: input, actorUserId: me.id);
     } else {
-      await ref.read(taskMvpRepoProvider).updateTemplate(guildId: me.guildId!, input: input, actorUserId: me.id);
+      await ref.read(taskMvpRepoProvider).updateTemplate(
+          guildId: me.guildId!, input: input, actorUserId: me.id);
       await ref.read(taskMvpRepoProvider).syncTemplateToOpenInstances(
-        guildId: me.guildId!,
-        templateId: input.id,
-        newTitle: input.title,
-        newCoins: input.coinsBase,
-      );
+            guildId: me.guildId!,
+            templateId: input.id,
+            newTitle: input.title,
+            newCoins: input.coinsBase,
+          );
     }
 
     // Refresh alles na aanpassing
@@ -1079,18 +1343,20 @@ List<TaskInstance> _pickRelevantPerTemplate(List<TaskInstance> instances) {
   }
 }
 
-final _templatesProvider = StreamProvider.autoDispose.family<List<TaskTemplate>, String>((ref, gid) {
+final _templatesProvider =
+    StreamProvider.autoDispose.family<List<TaskTemplate>, String>((ref, gid) {
   return ref.read(taskMvpRepoProvider).watchTemplates(gid);
 });
 
-final _personalTemplatesProvider = StreamProvider.autoDispose.family<List<TaskTemplate>, String>((ref, uid) {
+final _personalTemplatesProvider =
+    StreamProvider.autoDispose.family<List<TaskTemplate>, String>((ref, uid) {
   return ref.read(personalTaskRepoProvider).watchTemplates(uid);
 });
 
 typedef _PersonalWeekArg = ({String uid, DateTime start, DateTime end});
 
-final _personalWeekInstancesProvider =
-    StreamProvider.autoDispose.family<List<TaskInstance>, _PersonalWeekArg>((ref, arg) {
+final _personalWeekInstancesProvider = StreamProvider.autoDispose
+    .family<List<TaskInstance>, _PersonalWeekArg>((ref, arg) {
   return ref.read(personalTaskRepoProvider).watchWeekInstances(
         uid: arg.uid,
         weekStart: arg.start,
@@ -1100,7 +1366,8 @@ final _personalWeekInstancesProvider =
 
 typedef _WeekArg = ({String guildId, DateTime start, DateTime end});
 
-final _weekInstancesProvider = StreamProvider.autoDispose.family<List<TaskInstance>, _WeekArg>((ref, arg) {
+final _weekInstancesProvider =
+    StreamProvider.autoDispose.family<List<TaskInstance>, _WeekArg>((ref, arg) {
   return ref.read(taskMvpRepoProvider).watchWeekInstances(
         guildId: arg.guildId,
         weekStart: arg.start,
@@ -1147,13 +1414,17 @@ class _CoopQuestsPanelState extends ConsumerState<_CoopQuestsPanel> {
   @override
   Widget build(BuildContext context) {
     final guildId = widget.guildId;
-    final groups = ref.watch(_coopGroupsProvider(guildId)).value ?? const <TaskGroup>[];
+    final groups =
+        ref.watch(_coopGroupsProvider(guildId)).value ?? const <TaskGroup>[];
     if (groups.isEmpty) return const SizedBox.shrink();
-    final instances = ref.watch(_weekInstancesProvider((
-      guildId: guildId,
-      start: widget.weekStart,
-      end: widget.weekEnd,
-    ))).value ?? const <TaskInstance>[];
+    final instances = ref
+            .watch(_weekInstancesProvider((
+              guildId: guildId,
+              start: widget.weekStart,
+              end: widget.weekEnd,
+            )))
+            .value ??
+        const <TaskInstance>[];
 
     final theme = Theme.of(context);
     final inGroups = instances.where((i) => i.groupId != null).toList();
@@ -1161,7 +1432,8 @@ class _CoopQuestsPanelState extends ConsumerState<_CoopQuestsPanel> {
         inGroups.where((i) => i.status == TaskInstanceStatus.completed).length;
     final doneQuests = groups.where((g) {
       final mine = instances.where((i) => i.groupId == g.id).toList();
-      return mine.isNotEmpty && mine.every((i) => i.status == TaskInstanceStatus.completed);
+      return mine.isNotEmpty &&
+          mine.every((i) => i.status == TaskInstanceStatus.completed);
     }).length;
 
     return Padding(
@@ -1210,9 +1482,13 @@ class _CoopQuestsPanelState extends ConsumerState<_CoopQuestsPanel> {
                         for (final g in groups)
                           _CoopGroupCard(
                             group: g,
-                            instances: instances.where((i) => i.groupId == g.id).toList(),
-                            onDelete: () => _deleteGroup(context, ref, g),
-                            onEdit: () => _editGroup(context, ref, g),
+                            instances: instances
+                                .where((i) => i.groupId == g.id)
+                                .toList(),
+                            onDelete: () => _deleteGroupFlow(
+                                context, ref, widget.guildId, g),
+                            onEdit: () =>
+                                _editGroupFlow(context, ref, widget.guildId, g),
                           ),
                       ],
                     ),
@@ -1223,68 +1499,81 @@ class _CoopQuestsPanelState extends ConsumerState<_CoopQuestsPanel> {
       ),
     );
   }
+}
 
-  Future<void> _deleteGroup(BuildContext context, WidgetRef ref, TaskGroup g) async {
-    final me = ref.read(currentUserProvider).value;
-    if (me == null) return;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Coöp-quest verwijderen'),
-        content: Text('"${g.title}" en de bijbehorende subtaken verwijderen?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuleer')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Verwijder')),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    await ref
-        .read(taskMvpRepoProvider)
-        .deleteGroup(guildId: widget.guildId, groupId: g.id, actorUserId: me.id);
-    ref.invalidate(_weekInstancesProvider);
-  }
+Future<void> _deleteGroupFlow(
+    BuildContext context, WidgetRef ref, String guildId, TaskGroup g) async {
+  final me = ref.read(currentUserProvider).value;
+  if (me == null) return;
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Coöp-quest verwijderen'),
+      content: Text('"${g.title}" en de bijbehorende subtaken verwijderen?'),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuleer')),
+        FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Verwijder')),
+      ],
+    ),
+  );
+  if (ok != true) return;
+  await ref
+      .read(taskMvpRepoProvider)
+      .deleteGroup(guildId: guildId, groupId: g.id, actorUserId: me.id);
+  ref.invalidate(_weekInstancesProvider);
+}
 
-  Future<void> _editGroup(BuildContext context, WidgetRef ref, TaskGroup g) async {
-    final me = ref.read(currentUserProvider).value;
-    if (me == null) return;
-    final titleC = TextEditingController(text: g.title);
-    final bonusC = TextEditingController(text: g.bonusCoins.toString());
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Coöp-quest bewerken'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: titleC, decoration: const InputDecoration(labelText: 'Naam')),
-            const SizedBox(height: 10),
-            TextField(
-              controller: bonusC,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Bonus-coins bij samen afronden'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuleer')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Opslaan')),
-        ],
-      ),
-    );
-    if (ok != true || titleC.text.trim().isEmpty) return;
-    await ref.read(taskMvpRepoProvider).updateGroup(
-          guildId: widget.guildId,
-          input: TaskGroup(
-            id: g.id,
-            title: titleC.text.trim(),
-            description: g.description,
-            skillType: g.skillType,
-            bonusCoins: int.tryParse(bonusC.text.trim()) ?? 0,
+Future<void> _editGroupFlow(
+    BuildContext context, WidgetRef ref, String guildId, TaskGroup g) async {
+  final me = ref.read(currentUserProvider).value;
+  if (me == null) return;
+  final titleC = TextEditingController(text: g.title);
+  final bonusC = TextEditingController(text: g.bonusCoins.toString());
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Coöp-quest bewerken'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+              controller: titleC,
+              decoration: const InputDecoration(labelText: 'Naam')),
+          const SizedBox(height: 10),
+          TextField(
+            controller: bonusC,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+                labelText: 'Bonus-coins bij samen afronden'),
           ),
-          actorUserId: me.id,
-        );
-  }
+        ],
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuleer')),
+        FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Opslaan')),
+      ],
+    ),
+  );
+  if (ok != true || titleC.text.trim().isEmpty) return;
+  await ref.read(taskMvpRepoProvider).updateGroup(
+        guildId: guildId,
+        input: TaskGroup(
+          id: g.id,
+          title: titleC.text.trim(),
+          description: g.description,
+          skillType: g.skillType,
+          bonusCoins: int.tryParse(bonusC.text.trim()) ?? 0,
+        ),
+        actorUserId: me.id,
+      );
 }
 
 class _CoopGroupCard extends StatelessWidget {
@@ -1302,9 +1591,8 @@ class _CoopGroupCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final total = instances.length;
-    final done = instances
-        .where((i) => i.status == TaskInstanceStatus.completed)
-        .length;
+    final done =
+        instances.where((i) => i.status == TaskInstanceStatus.completed).length;
     final progress = total == 0 ? 0.0 : done / total;
     final complete = total > 0 && done == total;
 
@@ -1374,13 +1662,15 @@ class _BoardList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (instances.isEmpty) return const Center(child: Text('Geen tasks voor deze week.'));
+    if (instances.isEmpty)
+      return const Center(child: Text('Geen tasks voor deze week.'));
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
         for (var idx = 0; idx < instances.length; idx++)
           EnterMotion(
-            delayMs: 40 + (idx * 28),
+            key: ValueKey(instances[idx].id),
+            delayMs: 40 + (idx < 8 ? idx : 8) * 28,
             child: _TaskCard(
               i: instances[idx],
               meId: meId,
@@ -1426,12 +1716,15 @@ class _PlannerView extends StatelessWidget {
       final tmpl = templates.where((t) => t.id == i.templateId).firstOrNull;
       if (tmpl != null && !tmpl.isRepeatable) {
         final d = i.scheduledFor;
-        return d.year == today.year && d.month == today.month && d.day == today.day;
+        return d.year == today.year &&
+            d.month == today.month &&
+            d.day == today.day;
       }
       return true;
     }).toList();
 
-    if (visible.isEmpty) return const Center(child: Text('Geen tasks in deze week.'));
+    if (visible.isEmpty)
+      return const Center(child: Text('Geen tasks in deze week.'));
 
     final dayKeys = <String>[];
     final grouped = <String, List<TaskInstance>>{};
@@ -1504,7 +1797,8 @@ class _DayColumn extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: Text(dayLabel, style: Theme.of(context).textTheme.titleMedium),
+              child: Text(dayLabel,
+                  style: Theme.of(context).textTheme.titleMedium),
             ),
             const Divider(height: 1),
             const SizedBox(height: 8),
@@ -1534,7 +1828,8 @@ class _DayColumn extends StatelessWidget {
   }
 }
 
-String _dayNl(DateTime d) => const ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'][d.weekday - 1];
+String _dayNl(DateTime d) =>
+    const ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'][d.weekday - 1];
 
 IconData _skillIcon(SkillType? s) => switch (s) {
       SkillType.cooking => Icons.soup_kitchen_outlined,
@@ -1566,7 +1861,8 @@ class _CoinChip extends StatelessWidget {
           Icon(Icons.toll, size: 16, color: theme.colorScheme.tertiary),
           const SizedBox(width: 6),
           Text('$coins',
-              style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.tertiary)),
+              style: theme.textTheme.labelLarge
+                  ?.copyWith(color: theme.colorScheme.tertiary)),
         ],
       ),
     );
@@ -1586,7 +1882,8 @@ class _WeekStrip extends StatelessWidget {
     required this.onNext,
   });
 
-  bool _sameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+  bool _sameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
 
   @override
   Widget build(BuildContext context) {
@@ -1594,7 +1891,8 @@ class _WeekStrip extends StatelessWidget {
     final cs = theme.colorScheme;
     final now = DateTime.now();
     final fmt = DateFormat('d MMM');
-    final label = '${fmt.format(weekStart)} \u2013 ${fmt.format(weekStart.add(const Duration(days: 6)))}';
+    final label =
+        '${fmt.format(weekStart)} \u2013 ${fmt.format(weekStart.add(const Duration(days: 6)))}';
 
     return Column(
       children: [
@@ -1609,7 +1907,8 @@ class _WeekStrip extends StatelessWidget {
             Expanded(
               child: Center(
                 child: Text(label,
-                    style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: cs.onSurfaceVariant)),
               ),
             ),
             IconButton(
@@ -1628,10 +1927,13 @@ class _WeekStrip extends StatelessWidget {
                   final day = weekStart.add(Duration(days: n));
                   final isToday = _sameDay(day, now);
                   final dayInst = instances
-                      .where((i) => _sameDay(i.scheduledFor, day) && i.status != TaskInstanceStatus.missed)
+                      .where((i) =>
+                          _sameDay(i.scheduledFor, day) &&
+                          i.status != TaskInstanceStatus.missed)
                       .toList();
                   final allDone = dayInst.isNotEmpty &&
-                      dayInst.every((i) => i.status == TaskInstanceStatus.completed);
+                      dayInst.every(
+                          (i) => i.status == TaskInstanceStatus.completed);
                   final dot = dayInst.isEmpty
                       ? Colors.transparent
                       : allDone
@@ -1643,13 +1945,16 @@ class _WeekStrip extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: isToday ? cs.primary : cs.surfaceContainer,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: isToday ? cs.primary : cs.outlineVariant),
+                      border: Border.all(
+                          color: isToday ? cs.primary : cs.outlineVariant),
                     ),
                     child: Column(
                       children: [
                         Text(_dayNl(day),
                             style: theme.textTheme.labelSmall?.copyWith(
-                                color: isToday ? cs.onPrimary : cs.onSurfaceVariant)),
+                                color: isToday
+                                    ? cs.onPrimary
+                                    : cs.onSurfaceVariant)),
                         const SizedBox(height: 2),
                         Text('${day.day}',
                             style: theme.textTheme.titleSmall?.copyWith(
@@ -1658,7 +1963,8 @@ class _WeekStrip extends StatelessWidget {
                         Container(
                           width: 5,
                           height: 5,
-                          decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+                          decoration:
+                              BoxDecoration(color: dot, shape: BoxShape.circle),
                         ),
                       ],
                     ),
@@ -1681,7 +1987,8 @@ class _StatsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final quest = instances.where((i) => i.groupId != null).toList();
-    final questDone = quest.where((i) => i.status == TaskInstanceStatus.completed).length;
+    final questDone =
+        quest.where((i) => i.status == TaskInstanceStatus.completed).length;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       child: Row(
@@ -1718,9 +2025,12 @@ class _StatTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(value, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w500)),
+          Text(value,
+              style: theme.textTheme.headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.w500)),
           Text(label,
-              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
         ],
       ),
     );
@@ -1750,8 +2060,10 @@ class _TaskCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final canClaim = i.status == TaskInstanceStatus.open || i.status == TaskInstanceStatus.claimed;
-    final canComplete = i.status != TaskInstanceStatus.completed && i.status != TaskInstanceStatus.missed;
+    final canClaim = i.status == TaskInstanceStatus.open ||
+        i.status == TaskInstanceStatus.claimed;
+    final canComplete = i.status != TaskInstanceStatus.completed &&
+        i.status != TaskInstanceStatus.missed;
     final isClaimedByMe = i.claimedByUserId == meId;
     final done = i.status == TaskInstanceStatus.completed;
 
@@ -1765,94 +2077,402 @@ class _TaskCard extends StatelessWidget {
 
     final subtitle = [
       'Deadline ${_dayNl(i.dueAt)} ${DateFormat('HH:mm').format(i.dueAt)}',
-      if (showClaim && i.claimedByUserId != null) (isClaimedByMe ? 'Jij' : 'Partner'),
+      if (showClaim && i.claimedByUserId != null)
+        (isClaimedByMe ? 'Jij' : 'Partner'),
     ].join(' \u00b7 ');
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Card(
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onOpen,
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: cs.primary.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(12),
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 300),
+      opacity: done ? 0.6 : 1,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Card(
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onOpen,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: cs.primary.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(_skillIcon(i.skillType),
+                            color: cs.primary, size: 22),
                       ),
-                      child: Icon(_skillIcon(i.skillType), color: cs.primary, size: 22),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            i.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w500,
-                              color: done ? cs.onSurfaceVariant : cs.onSurface,
-                              decoration: done ? TextDecoration.lineThrough : null,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              i.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w500,
+                                color:
+                                    done ? cs.onSurfaceVariant : cs.onSurface,
+                                decoration:
+                                    done ? TextDecoration.lineThrough : null,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            subtitle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                          ),
+                            const SizedBox(height: 2),
+                            Text(
+                              subtitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall
+                                  ?.copyWith(color: cs.onSurfaceVariant),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text('+${i.coinsAwarded}',
+                              style: theme.textTheme.titleSmall
+                                  ?.copyWith(color: cs.tertiary)),
+                          if (showClaim)
+                            Text(statusLabel,
+                                style: theme.textTheme.labelSmall
+                                    ?.copyWith(color: statusColor)),
                         ],
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
+                    ],
+                  ),
+                  if (canComplete || (showClaim && canClaim)) ...[
+                    const SizedBox(height: 10),
+                    Row(
                       children: [
-                        Text('+${i.coinsAwarded}',
-                            style: theme.textTheme.titleSmall?.copyWith(color: cs.tertiary)),
-                        if (showClaim)
-                          Text(statusLabel,
-                              style: theme.textTheme.labelSmall?.copyWith(color: statusColor)),
+                        if (showClaim && canClaim)
+                          TextButton(
+                            style: TextButton.styleFrom(
+                                visualDensity: VisualDensity.compact),
+                            onPressed: () => isClaimedByMe
+                                ? onUnclaim(i.id, i.templateId)
+                                : onClaim(i.id, i.templateId),
+                            child: Text(isClaimedByMe ? 'Laat los' : 'Claim'),
+                          ),
+                        const Spacer(),
+                        if (canComplete)
+                          FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                                visualDensity: VisualDensity.compact),
+                            onPressed: () => onComplete(i.id),
+                            icon: const Icon(Icons.check, size: 18),
+                            label: const Text('Klaar'),
+                          ),
                       ],
                     ),
                   ],
-                ),
-                if (canComplete || (showClaim && canClaim)) ...[
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      if (showClaim && canClaim)
-                        TextButton(
-                          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                          onPressed: () => isClaimedByMe
-                              ? onUnclaim(i.id, i.templateId)
-                              : onClaim(i.id, i.templateId),
-                          child: Text(isClaimedByMe ? 'Laat los' : 'Claim'),
-                        ),
-                      const Spacer(),
-                      if (canComplete)
-                        FilledButton.icon(
-                          style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
-                          onPressed: () => onComplete(i.id),
-                          icon: const Icon(Icons.check, size: 18),
-                          label: const Text('Klaar'),
-                        ),
-                    ],
-                  ),
                 ],
-              ],
+              ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Vaste balk in een scrollende pagina (filterchips).
+class _PinnedBar extends SliverPersistentHeaderDelegate {
+  final double height;
+  final Color color;
+  final Widget child;
+  const _PinnedBar(
+      {required this.height, required this.color, required this.child});
+
+  @override
+  double get minExtent => height;
+  @override
+  double get maxExtent => height;
+
+  @override
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+        color: color, alignment: Alignment.centerLeft, child: child);
+  }
+
+  @override
+  bool shouldRebuild(covariant _PinnedBar old) => true;
+}
+
+class _SectionLabel extends StatelessWidget {
+  final String title;
+  final int count;
+  const _SectionLabel({required this.title, required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final style = theme.textTheme.labelLarge
+        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      child: Row(
+        children: [
+          Text(title, style: style),
+          const Spacer(),
+          Text('$count', style: style),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnimatedBar extends StatelessWidget {
+  final double value;
+  final Color color;
+  const _AnimatedBar({required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final track = Theme.of(context).colorScheme.outlineVariant;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: value),
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.easeOutCubic,
+      builder: (context, v, _) => ClipRRect(
+        borderRadius: BorderRadius.circular(99),
+        child: LinearProgressIndicator(
+            value: v, minHeight: 8, color: color, backgroundColor: track),
+      ),
+    );
+  }
+}
+
+/// Coöp-quest als één kaart: tik om de subtaken uit te klappen.
+class _QuestCard extends StatefulWidget {
+  final TaskGroup group;
+  final List<TaskInstance> instances;
+  final String meId;
+  final Future<void> Function(String id) onComplete;
+  final Future<void> Function(TaskInstance instance) onOpen;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _QuestCard({
+    super.key,
+    required this.group,
+    required this.instances,
+    required this.meId,
+    required this.onComplete,
+    required this.onOpen,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  State<_QuestCard> createState() => _QuestCardState();
+}
+
+class _QuestCardState extends State<_QuestCard> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final total = widget.instances.length;
+    final done = widget.instances
+        .where((i) => i.status == TaskInstanceStatus.completed)
+        .length;
+    final complete = total > 0 && done == total;
+    final sorted = [...widget.instances]..sort((a, b) {
+        final byDone = (a.status == TaskInstanceStatus.completed ? 1 : 0) -
+            (b.status == TaskInstanceStatus.completed ? 1 : 0);
+        return byDone != 0 ? byDone : a.title.compareTo(b.title);
+      });
+    final accent = complete ? cs.secondary : cs.primary;
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _open = !_open),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 250),
+                        child: Icon(
+                          complete
+                              ? Icons.check_circle
+                              : Icons.groups_2_outlined,
+                          key: ValueKey(complete),
+                          color: accent,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          widget.group.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                      Text('$done/$total',
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: cs.onSurfaceVariant)),
+                      const SizedBox(width: 4),
+                      AnimatedRotation(
+                        turns: _open ? 0.5 : 0,
+                        duration: const Duration(milliseconds: 250),
+                        curve: Curves.easeOutCubic,
+                        child: const Icon(Icons.expand_more),
+                      ),
+                      PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_vert, size: 20),
+                        onSelected: (v) =>
+                            v == 'delete' ? widget.onDelete() : widget.onEdit(),
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(value: 'edit', child: Text('Bewerken')),
+                          PopupMenuItem(
+                              value: 'delete', child: Text('Verwijderen')),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: _AnimatedBar(
+                        value: total == 0 ? 0 : done / total, color: accent),
+                  ),
+                  if (widget.group.bonusCoins > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6, right: 8),
+                      child: Text(
+                        'Samen afronden: +${widget.group.bonusCoins} coins voor jullie allebei',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: cs.onSurfaceVariant),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: _open
+                ? Column(
+                    children: [
+                      const Divider(height: 1),
+                      for (final i in sorted)
+                        _SubtaskRow(
+                          key: ValueKey(i.id),
+                          i: i,
+                          meId: widget.meId,
+                          onComplete: widget.onComplete,
+                          onOpen: () => widget.onOpen(i),
+                        ),
+                    ],
+                  )
+                : const SizedBox(width: double.infinity),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SubtaskRow extends StatelessWidget {
+  final TaskInstance i;
+  final String meId;
+  final Future<void> Function(String id) onComplete;
+  final VoidCallback onOpen;
+  const _SubtaskRow({
+    super.key,
+    required this.i,
+    required this.meId,
+    required this.onComplete,
+    required this.onOpen,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final done = i.status == TaskInstanceStatus.completed;
+    final canComplete = !done && i.status != TaskInstanceStatus.missed;
+    final who = i.claimedByUserId == null
+        ? null
+        : (i.claimedByUserId == meId ? 'Jij' : 'Partner');
+    final sub =
+        done ? (who == null ? 'Klaar' : 'Klaar \u00b7 $who') : (who ?? 'Open');
+
+    return InkWell(
+      onTap: onOpen,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(10, 6, 14, 6),
+        child: Row(
+          children: [
+            InkResponse(
+              radius: 24,
+              onTap: canComplete ? () => onComplete(i.id) : null,
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 220),
+                  transitionBuilder: (child, anim) =>
+                      ScaleTransition(scale: anim, child: child),
+                  child: Icon(
+                    done ? Icons.check_circle : Icons.radio_button_unchecked,
+                    key: ValueKey(done),
+                    size: 24,
+                    color: done ? cs.secondary : cs.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 250),
+                opacity: done ? 0.6 : 1,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      i.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        decoration: done ? TextDecoration.lineThrough : null,
+                      ),
+                    ),
+                    Text(sub,
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: cs.onSurfaceVariant)),
+                  ],
+                ),
+              ),
+            ),
+            Text('+${i.coinsAwarded}',
+                style:
+                    theme.textTheme.labelLarge?.copyWith(color: cs.tertiary)),
+          ],
         ),
       ),
     );
@@ -1864,7 +2484,8 @@ class _TemplateScroller extends StatelessWidget {
   final ValueChanged<TaskTemplate> onEdit;
   final ValueChanged<String> onArchive;
 
-  const _TemplateScroller({required this.templates, required this.onEdit, required this.onArchive});
+  const _TemplateScroller(
+      {required this.templates, required this.onEdit, required this.onArchive});
 
   @override
   Widget build(BuildContext context) {
@@ -1888,7 +2509,8 @@ class _TemplateScroller extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
               color: Theme.of(context).colorScheme.surface,
-              border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+              border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant),
             ),
             child: Row(
               children: [
@@ -1896,8 +2518,11 @@ class _TemplateScroller extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(t.title, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-                      Text('${t.scheduleType.name} • ${t.coinsBase} coins', overflow: TextOverflow.ellipsis),
+                      Text(t.title,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
+                      Text('${t.scheduleType.name} • ${t.coinsBase} coins',
+                          overflow: TextOverflow.ellipsis),
                     ],
                   ),
                 ),
