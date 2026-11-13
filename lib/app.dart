@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:household_rpg/app/session_providers.dart';
 import 'package:household_rpg/features/inventory/inventory_page.dart';
 import 'package:household_rpg/features/profile/auth_gate_page.dart';
-import 'package:household_rpg/features/profile/menu_page.dart';
 import 'package:household_rpg/features/profile/profile_page.dart';
 import 'package:household_rpg/features/shop/shop_page.dart';
 import 'package:household_rpg/features/tasks/tasks_page.dart';
@@ -36,11 +35,11 @@ class _HomeShellState extends ConsumerState<_HomeShell> {
   int _index = 0;
 
   final _pages = const [
-    TasksPage(),
+    TasksPage(key: ValueKey('tab-taken')),
     ShopPage(),
     InventoryPage(),
+    TasksPage(key: ValueKey('tab-kalender'), calendar: true),
     ProfilePage(),
-    MenuPage(),
   ];
 
   @override
@@ -73,9 +72,11 @@ class _HomeShellState extends ConsumerState<_HomeShell> {
         destinations: const [
           NavigationDestination(icon: Icon(Icons.checklist), label: 'Taken'),
           NavigationDestination(icon: Icon(Icons.store), label: 'Shop'),
-          NavigationDestination(icon: Icon(Icons.backpack_outlined), label: 'Inventory'),
+          NavigationDestination(
+              icon: Icon(Icons.backpack_outlined), label: 'Inventory'),
+          NavigationDestination(
+              icon: Icon(Icons.calendar_month_outlined), label: 'Kalender'),
           NavigationDestination(icon: Icon(Icons.person), label: 'Profiel'),
-          NavigationDestination(icon: Icon(Icons.more_horiz), label: 'Menu'),
         ],
       ),
     );

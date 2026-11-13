@@ -7,23 +7,76 @@ import 'package:household_rpg/data/models/models.dart';
 import 'package:household_rpg/data/repositories/task_mvp_repo.dart';
 import 'package:household_rpg/data/repositories/personal_task_repo.dart';
 import 'package:household_rpg/theme/app_theme.dart';
+import 'package:household_rpg/widgets/coin_chip.dart';
+import 'package:household_rpg/widgets/pinned_bar.dart';
+import 'package:household_rpg/widgets/stat_tile.dart';
 
 enum TaskViewMode { board, week }
 
 enum TaskFilterMode { openClaimed, mine, unclaimed, late, all }
 
 class TasksPage extends ConsumerStatefulWidget {
-  const TasksPage({super.key});
+  /// true = de Kalender-tab (dagpagina's), false = de Taken-tab (board).
+  final bool calendar;
+  const TasksPage({super.key, this.calendar = false});
 
   @override
   ConsumerState<TasksPage> createState() => _TasksPageState();
 }
 
 class _TasksPageState extends ConsumerState<TasksPage> {
-  TaskViewMode _viewMode = TaskViewMode.board;
+  late TaskViewMode _viewMode;
   TaskFilterMode _filterMode = TaskFilterMode.openClaimed;
   DateTime _weekAnchor = DateTime.now();
   String? _lastBootstrapKey;
+  late final PageController _plannerController;
+  late int _plannerPage;
+
+  @override
+  void initState() {
+    super.initState();
+    _viewMode = widget.calendar ? TaskViewMode.week : TaskViewMode.board;
+    _plannerPage = _defaultPlannerPage();
+    _plannerController =
+        PageController(viewportFraction: 0.88, initialPage: _plannerPage);
+  }
+
+  @override
+  void dispose() {
+    _plannerController.dispose();
+    super.dispose();
+  }
+
+  /// 0 = "Hele week", 1..7 = maandag t/m zondag. Standaard vandaag, anders de weekpagina.
+  int _defaultPlannerPage() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final offset = (today.difference(_weekStart).inHours / 24).round();
+    return (offset >= 0 && offset < 7) ? offset + 1 : 0;
+  }
+
+  void _selectPlannerPage(int page) {
+    setState(() => _plannerPage = page);
+    if (_plannerController.hasClients) {
+      _plannerController.animateToPage(
+        page,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
+  void _changeWeek(int deltaDays) {
+    setState(() {
+      _weekAnchor = _weekAnchor.add(Duration(days: deltaDays));
+      _plannerPage = _defaultPlannerPage();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_plannerController.hasClients) {
+        _plannerController.jumpToPage(_plannerPage);
+      }
+    });
+  }
 
   DateTime get _weekStart {
     final d = _weekAnchor;
@@ -55,19 +108,9 @@ class _TasksPageState extends ConsumerState<TasksPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Deze week'),
+        title: Text(widget.calendar ? 'Kalender' : 'Deze week'),
         actions: [
-          if (meAsync.value != null) _CoinChip(coins: meAsync.value!.coins),
-          IconButton(
-            tooltip: _viewMode == TaskViewMode.board ? 'Planner' : 'Board',
-            onPressed: () => setState(() => _viewMode =
-                _viewMode == TaskViewMode.board
-                    ? TaskViewMode.week
-                    : TaskViewMode.board),
-            icon: Icon(_viewMode == TaskViewMode.board
-                ? Icons.calendar_view_week
-                : Icons.view_agenda_outlined),
-          ),
+          if (meAsync.value != null) CoinChip(coins: meAsync.value!.coins),
           IconButton(
             tooltip: 'Nieuw template',
             onPressed: () {
@@ -155,9 +198,12 @@ class _TasksPageState extends ConsumerState<TasksPage> {
 
               if (_viewMode == TaskViewMode.week) {
                 return _PlannerView(
+                  weekStart: _weekStart,
                   instances: live,
                   templates: loadedTemplates ?? [],
                   meId: me.id,
+                  controller: _plannerController,
+                  onPageChanged: (p) => setState(() => _plannerPage = p),
                   onClaim: (id, tid) async {},
                   onUnclaim: (id, tid) async {},
                   onComplete: (id) => _completePersonal(me.id, id),
@@ -566,10 +612,11 @@ class _TasksPageState extends ConsumerState<TasksPage> {
           _WeekStrip(
             weekStart: _weekStart,
             instances: instances,
-            onPrev: () => setState(() =>
-                _weekAnchor = _weekAnchor.subtract(const Duration(days: 7))),
-            onNext: () => setState(
-                () => _weekAnchor = _weekAnchor.add(const Duration(days: 7))),
+            onPrev: () => _changeWeek(-7),
+            onNext: () => _changeWeek(7),
+            selectedPage: _viewMode == TaskViewMode.week ? _plannerPage : null,
+            onSelectPage:
+                _viewMode == TaskViewMode.week ? _selectPlannerPage : null,
           ),
         ],
       ),
@@ -647,14 +694,14 @@ class _TasksPageState extends ConsumerState<TasksPage> {
           return Column(
             children: [
               _headerControls(instances: live),
-              _StatsRow(together: together, instances: live),
-              _CoopQuestsPanel(
-                  guildId: guildId, weekStart: _weekStart, weekEnd: _weekEnd),
               Expanded(
                 child: _PlannerView(
+                  weekStart: _weekStart,
                   instances: filtered,
                   templates: loadedTemplates ?? [],
                   meId: me.id,
+                  controller: _plannerController,
+                  onPageChanged: (p) => setState(() => _plannerPage = p),
                   onClaim: onClaim,
                   onUnclaim: onUnclaim,
                   onComplete: onComplete,
@@ -699,8 +746,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                   child: _StatsRow(together: together, instances: live)),
               SliverPersistentHeader(
                 pinned: true,
-                delegate:
-                    _PinnedBar(height: 52, color: bg, child: _filterBar()),
+                delegate: PinnedBar(height: 52, color: bg, child: _filterBar()),
               ),
               if (quests.isNotEmpty) ...[
                 SliverToBoxAdapter(
@@ -1686,10 +1732,40 @@ class _BoardList extends StatelessWidget {
   }
 }
 
+String _dayFullNl(DateTime d) => const [
+      'Maandag',
+      'Dinsdag',
+      'Woensdag',
+      'Donderdag',
+      'Vrijdag',
+      'Zaterdag',
+      'Zondag'
+    ][d.weekday - 1];
+
+String _monthNl(DateTime d) => const [
+      'jan',
+      'feb',
+      'mrt',
+      'apr',
+      'mei',
+      'jun',
+      'jul',
+      'aug',
+      'sep',
+      'okt',
+      'nov',
+      'dec'
+    ][d.month - 1];
+
+/// Kalender: per dag een pagina (veeg of tik op de weekstrook). Pagina 0 is "Hele week"
+/// voor wekelijkse en maandelijkse taken die je kunt doen wanneer het uitkomt.
 class _PlannerView extends StatelessWidget {
+  final DateTime weekStart;
   final List<TaskInstance> instances;
   final List<TaskTemplate> templates;
   final String meId;
+  final PageController controller;
+  final ValueChanged<int> onPageChanged;
   final Future<void> Function(String id, String templateId) onClaim;
   final Future<void> Function(String id, String templateId) onUnclaim;
   final Future<void> Function(String id) onComplete;
@@ -1697,9 +1773,12 @@ class _PlannerView extends StatelessWidget {
   final bool showClaim;
 
   const _PlannerView({
+    required this.weekStart,
     required this.instances,
     required this.templates,
     required this.meId,
+    required this.controller,
+    required this.onPageChanged,
     required this.onClaim,
     required this.onUnclaim,
     required this.onComplete,
@@ -1707,54 +1786,87 @@ class _PlannerView extends StatelessWidget {
     this.showClaim = true,
   });
 
+  bool _sameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
   @override
   Widget build(BuildContext context) {
-    final today = DateTime.now();
+    final now = DateTime.now();
+    final start = DateTime(weekStart.year, weekStart.month, weekStart.day);
 
-    // Niet-herhaalbare tasks alleen op vandaag tonen
+    // Niet-herhaalbare taken alleen op vandaag tonen
     final visible = instances.where((i) {
       final tmpl = templates.where((t) => t.id == i.templateId).firstOrNull;
       if (tmpl != null && !tmpl.isRepeatable) {
-        final d = i.scheduledFor;
-        return d.year == today.year &&
-            d.month == today.month &&
-            d.day == today.day;
+        return _sameDay(i.scheduledFor, now);
       }
       return true;
-    }).toList();
+    });
 
-    if (visible.isEmpty)
-      return const Center(child: Text('Geen tasks in deze week.'));
-
-    final dayKeys = <String>[];
-    final grouped = <String, List<TaskInstance>>{};
+    final weekItems = <TaskInstance>[];
+    final dayItems = List.generate(7, (_) => <TaskInstance>[]);
     for (final i in visible) {
-      final k = DateFormat('EEE dd MMM').format(i.scheduledFor);
-      if (!grouped.containsKey(k)) dayKeys.add(k);
-      grouped.putIfAbsent(k, () => []).add(i);
+      final tmpl = templates.where((t) => t.id == i.templateId).firstOrNull;
+      final flexible = tmpl != null &&
+          (tmpl.scheduleType == TaskScheduleType.weekly ||
+              tmpl.scheduleType == TaskScheduleType.monthly);
+      final d = DateTime(
+          i.scheduledFor.year, i.scheduledFor.month, i.scheduledFor.day);
+      final idx = (d.difference(start).inHours / 24).round();
+      if (flexible || idx < 0 || idx > 6) {
+        weekItems.add(i);
+      } else {
+        dayItems[idx].add(i);
+      }
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (final key in dayKeys)
-                _DayColumn(
-                  dayLabel: key,
-                  instances: grouped[key]!,
-                  columnHeight: constraints.maxHeight - 24,
-                  meId: meId,
-                  onClaim: onClaim,
-                  onUnclaim: onUnclaim,
-                  onComplete: onComplete,
-                  onOpen: onOpen,
-                  showClaim: showClaim,
-                ),
-            ],
+    return PageView.builder(
+      controller: controller,
+      onPageChanged: onPageChanged,
+      itemCount: 8,
+      itemBuilder: (context, p) {
+        final String title;
+        final String subtitle;
+        final bool highlight;
+        final List<TaskInstance> items;
+        if (p == 0) {
+          title = 'Hele week';
+          subtitle = 'Wekelijkse en maandelijkse taken';
+          highlight = false;
+          items = weekItems;
+        } else {
+          final day = start.add(Duration(days: p - 1));
+          highlight = _sameDay(day, now);
+          title = highlight ? 'Vandaag' : _dayFullNl(day);
+          subtitle = '${day.day} ${_monthNl(day)}';
+          items = dayItems[p - 1];
+        }
+
+        return AnimatedBuilder(
+          animation: controller,
+          builder: (context, child) {
+            final page = controller.hasClients &&
+                    controller.position.haveDimensions &&
+                    controller.page != null
+                ? controller.page!
+                : controller.initialPage.toDouble();
+            final delta = (page - p).abs().clamp(0.0, 1.0);
+            return Opacity(
+              opacity: 1 - 0.45 * delta,
+              child: Transform.scale(scale: 1 - 0.04 * delta, child: child),
+            );
+          },
+          child: _PlannerPage(
+            title: title,
+            subtitle: subtitle,
+            highlight: highlight,
+            items: items,
+            meId: meId,
+            showClaim: showClaim,
+            onClaim: onClaim,
+            onUnclaim: onUnclaim,
+            onComplete: onComplete,
+            onOpen: onOpen,
           ),
         );
       },
@@ -1762,67 +1874,109 @@ class _PlannerView extends StatelessWidget {
   }
 }
 
-class _DayColumn extends StatelessWidget {
-  final String dayLabel;
-  final List<TaskInstance> instances;
-  final double columnHeight;
+class _PlannerPage extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final bool highlight;
+  final List<TaskInstance> items;
   final String meId;
+  final bool showClaim;
   final Future<void> Function(String id, String templateId) onClaim;
   final Future<void> Function(String id, String templateId) onUnclaim;
   final Future<void> Function(String id) onComplete;
   final Future<void> Function(TaskInstance instance) onOpen;
-  final bool showClaim;
 
-  const _DayColumn({
-    required this.dayLabel,
-    required this.instances,
-    required this.columnHeight,
+  const _PlannerPage({
+    required this.title,
+    required this.subtitle,
+    required this.highlight,
+    required this.items,
     required this.meId,
+    required this.showClaim,
     required this.onClaim,
     required this.onUnclaim,
     required this.onComplete,
     required this.onOpen,
-    this.showClaim = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 230,
-      height: columnHeight,
-      child: Padding(
-        padding: const EdgeInsets.only(right: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(dayLabel,
-                  style: Theme.of(context).textTheme.titleMedium),
-            ),
-            const Divider(height: 1),
-            const SizedBox(height: 8),
-            Expanded(
-              child: ListView(
-                children: [
-                  for (var idx = 0; idx < instances.length; idx++)
-                    EnterMotion(
-                      delayMs: 40 + (idx * 24),
-                      child: _TaskCard(
-                        i: instances[idx],
-                        meId: meId,
-                        onClaim: onClaim,
-                        onUnclaim: onUnclaim,
-                        onComplete: onComplete,
-                        onOpen: () => onOpen(instances[idx]),
-                        showClaim: showClaim,
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(6, 10, 6, 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w500,
+                          color: highlight ? cs.primary : cs.onSurface,
+                        ),
                       ),
-                    ),
-                ],
-              ),
+                      Text(subtitle,
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: cs.onSurfaceVariant)),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainer,
+                    borderRadius: BorderRadius.circular(99),
+                    border: Border.all(color: cs.outlineVariant),
+                  ),
+                  child: Text(
+                    '${items.length} ${items.length == 1 ? 'taak' : 'taken'}',
+                    style: theme.textTheme.labelMedium
+                        ?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+          Expanded(
+            child: items.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.event_available_outlined,
+                            size: 36, color: cs.onSurfaceVariant),
+                        const SizedBox(height: 8),
+                        Text('Niets gepland',
+                            style: theme.textTheme.bodyMedium
+                                ?.copyWith(color: cs.onSurfaceVariant)),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.only(bottom: 24),
+                    itemCount: items.length,
+                    itemBuilder: (context, idx) => _TaskCard(
+                      i: items[idx],
+                      meId: meId,
+                      onClaim: onClaim,
+                      onUnclaim: onUnclaim,
+                      onComplete: onComplete,
+                      onOpen: () => onOpen(items[idx]),
+                      showClaim: showClaim,
+                    ),
+                  ),
+          ),
+        ],
       ),
     );
   }
@@ -1840,46 +1994,24 @@ IconData _skillIcon(SkillType? s) => switch (s) {
       null => Icons.task_alt,
     };
 
-class _CoinChip extends StatelessWidget {
-  final int coins;
-  const _CoinChip({required this.coins});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      margin: const EdgeInsets.only(right: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.toll, size: 16, color: theme.colorScheme.tertiary),
-          const SizedBox(width: 6),
-          Text('$coins',
-              style: theme.textTheme.labelLarge
-                  ?.copyWith(color: theme.colorScheme.tertiary)),
-        ],
-      ),
-    );
-  }
-}
-
 /// Dagstrook van de week: vandaag gemarkeerd, stipje toont de voortgang van die dag.
 class _WeekStrip extends StatelessWidget {
   final DateTime weekStart;
   final List<TaskInstance> instances;
   final VoidCallback onPrev;
   final VoidCallback onNext;
+
+  /// Alleen in de kalender: 0 = hele week, 1..7 = ma t/m zo. Dagen worden dan tikbaar.
+  final int? selectedPage;
+  final ValueChanged<int>? onSelectPage;
+
   const _WeekStrip({
     required this.weekStart,
     required this.instances,
     required this.onPrev,
     required this.onNext,
+    this.selectedPage,
+    this.onSelectPage,
   });
 
   bool _sameDay(DateTime a, DateTime b) =>
@@ -1893,6 +2025,8 @@ class _WeekStrip extends StatelessWidget {
     final fmt = DateFormat('d MMM');
     final label =
         '${fmt.format(weekStart)} \u2013 ${fmt.format(weekStart.add(const Duration(days: 6)))}';
+    final select = onSelectPage;
+    const anim = Duration(milliseconds: 220);
 
     return Column(
       children: [
@@ -1906,9 +2040,33 @@ class _WeekStrip extends StatelessWidget {
             ),
             Expanded(
               child: Center(
-                child: Text(label,
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: cs.onSurfaceVariant)),
+                child: select == null
+                    ? Text(label,
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: cs.onSurfaceVariant))
+                    : GestureDetector(
+                        onTap: () => select(0),
+                        child: AnimatedContainer(
+                          duration: anim,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: selectedPage == 0
+                                ? cs.primary
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(99),
+                            border: Border.all(
+                                color: selectedPage == 0
+                                    ? cs.primary
+                                    : cs.outlineVariant),
+                          ),
+                          child: Text('Hele week \u00b7 $label',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                  color: selectedPage == 0
+                                      ? cs.onPrimary
+                                      : cs.onSurfaceVariant)),
+                        ),
+                      ),
               ),
             ),
             IconButton(
@@ -1926,6 +2084,10 @@ class _WeekStrip extends StatelessWidget {
                 child: Builder(builder: (context) {
                   final day = weekStart.add(Duration(days: n));
                   final isToday = _sameDay(day, now);
+                  final selected = select != null && selectedPage == n + 1;
+                  // Board: vandaag gevuld. Kalender: de gekozen dag gevuld, vandaag met ring.
+                  final filled = select == null ? isToday : selected;
+                  final ring = select != null && isToday && !selected;
                   final dayInst = instances
                       .where((i) =>
                           _sameDay(i.scheduledFor, day) &&
@@ -1938,35 +2100,41 @@ class _WeekStrip extends StatelessWidget {
                       ? Colors.transparent
                       : allDone
                           ? cs.secondary
-                          : (isToday ? cs.onPrimary : cs.primary);
-                  return Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 2),
-                    padding: const EdgeInsets.symmetric(vertical: 7),
-                    decoration: BoxDecoration(
-                      color: isToday ? cs.primary : cs.surfaceContainer,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: isToday ? cs.primary : cs.outlineVariant),
-                    ),
-                    child: Column(
-                      children: [
-                        Text(_dayNl(day),
-                            style: theme.textTheme.labelSmall?.copyWith(
-                                color: isToday
-                                    ? cs.onPrimary
-                                    : cs.onSurfaceVariant)),
-                        const SizedBox(height: 2),
-                        Text('${day.day}',
-                            style: theme.textTheme.titleSmall?.copyWith(
-                                color: isToday ? cs.onPrimary : cs.onSurface)),
-                        const SizedBox(height: 4),
-                        Container(
-                          width: 5,
-                          height: 5,
-                          decoration:
-                              BoxDecoration(color: dot, shape: BoxShape.circle),
-                        ),
-                      ],
+                          : (filled ? cs.onPrimary : cs.primary);
+                  return GestureDetector(
+                    onTap: select == null ? null : () => select(n + 1),
+                    child: AnimatedContainer(
+                      duration: anim,
+                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                      padding: const EdgeInsets.symmetric(vertical: 7),
+                      decoration: BoxDecoration(
+                        color: filled ? cs.primary : cs.surfaceContainer,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: filled || ring
+                                ? cs.primary
+                                : cs.outlineVariant),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(_dayNl(day),
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                  color: filled
+                                      ? cs.onPrimary
+                                      : cs.onSurfaceVariant)),
+                          const SizedBox(height: 2),
+                          Text('${day.day}',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                  color: filled ? cs.onPrimary : cs.onSurface)),
+                          const SizedBox(height: 4),
+                          Container(
+                            width: 5,
+                            height: 5,
+                            decoration: BoxDecoration(
+                                color: dot, shape: BoxShape.circle),
+                          ),
+                        ],
+                      ),
                     ),
                   );
                 }),
@@ -1993,44 +2161,14 @@ class _StatsRow extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       child: Row(
         children: [
-          Expanded(child: _StatTile(value: '$together', label: 'punten samen')),
+          Expanded(child: StatTile(value: '$together', label: 'punten samen')),
           const SizedBox(width: 8),
           Expanded(
-            child: _StatTile(
+            child: StatTile(
               value: quest.isEmpty ? '\u2013' : '$questDone/${quest.length}',
               label: 'quest-taken klaar',
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatTile extends StatelessWidget {
-  final String value;
-  final String label;
-  const _StatTile({required this.value, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(value,
-              style: theme.textTheme.headlineSmall
-                  ?.copyWith(fontWeight: FontWeight.w500)),
-          Text(label,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
         ],
       ),
     );
@@ -2182,30 +2320,6 @@ class _TaskCard extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Vaste balk in een scrollende pagina (filterchips).
-class _PinnedBar extends SliverPersistentHeaderDelegate {
-  final double height;
-  final Color color;
-  final Widget child;
-  const _PinnedBar(
-      {required this.height, required this.color, required this.child});
-
-  @override
-  double get minExtent => height;
-  @override
-  double get maxExtent => height;
-
-  @override
-  Widget build(
-      BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return Container(
-        color: color, alignment: Alignment.centerLeft, child: child);
-  }
-
-  @override
-  bool shouldRebuild(covariant _PinnedBar old) => true;
 }
 
 class _SectionLabel extends StatelessWidget {

@@ -35,7 +35,8 @@ class NeonButton extends StatelessWidget {
         border: Border.all(color: AppPalette.amber, width: filled ? 0 : 1.2),
         boxShadow: filled
             ? const [
-                BoxShadow(color: AppPalette.amber, blurRadius: 10, spreadRadius: 0.5),
+                BoxShadow(
+                    color: AppPalette.amber, blurRadius: 10, spreadRadius: 0.5),
               ]
             : null,
       ),

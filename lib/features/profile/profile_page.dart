@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:household_rpg/features/profile/menu_page.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:household_rpg/app/session_providers.dart';
@@ -15,14 +16,26 @@ class ProfilePage extends ConsumerWidget {
     final meAsync = ref.watch(currentUserProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Profiel')),
+      appBar: AppBar(
+        title: const Text('Profiel'),
+        actions: [
+          IconButton(
+            tooltip: 'Menu',
+            icon: const Icon(Icons.menu),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const MenuPage()),
+            ),
+          ),
+        ],
+      ),
       body: AtmosphereBackground(
         child: SafeArea(
             child: meAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => Center(child: Text('Error: $e')),
           data: (me) {
-            if (me == null) return const Center(child: Text('Geen user geladen'));
+            if (me == null)
+              return const Center(child: Text('Geen user geladen'));
 
             return ListView(
               padding: const EdgeInsets.all(16),
@@ -36,10 +49,13 @@ class ProfilePage extends ConsumerWidget {
                 const EnterMotion(delayMs: 140, child: _ThemeCard()),
                 const SizedBox(height: 12),
                 if (me.guildId != null)
-                  EnterMotion(delayMs: 180, child: _GuildLeaderboard(guildId: me.guildId!)),
+                  EnterMotion(
+                      delayMs: 180,
+                      child: _GuildLeaderboard(guildId: me.guildId!)),
                 const SizedBox(height: 12),
                 if (me.guildId != null)
-                  EnterMotion(delayMs: 220, child: _ActivityCard(guildId: me.guildId!)),
+                  EnterMotion(
+                      delayMs: 220, child: _ActivityCard(guildId: me.guildId!)),
               ],
             );
           },
@@ -58,7 +74,8 @@ class _NameCard extends ConsumerStatefulWidget {
 }
 
 class _NameCardState extends ConsumerState<_NameCard> {
-  late final TextEditingController _c = TextEditingController(text: widget.me.name);
+  late final TextEditingController _c =
+      TextEditingController(text: widget.me.name);
   bool _busy = false;
 
   @override
@@ -89,7 +106,9 @@ class _NameCardState extends ConsumerState<_NameCard> {
                     icon: const Icon(Icons.check),
                     onPressed: () async {
                       setState(() => _busy = true);
-                      await ref.read(fsUserRepoProvider).updateName(widget.me.id, _c.text.trim());
+                      await ref
+                          .read(fsUserRepoProvider)
+                          .updateName(widget.me.id, _c.text.trim());
                       if (mounted) setState(() => _busy = false);
                     },
                   ),
@@ -114,7 +133,9 @@ class _GuildCard extends ConsumerWidget {
           children: [
             Text('Guild', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
-            Text(me.guildId == null ? 'Nog geen guild' : 'Guild ID: ${me.guildId}'),
+            Text(me.guildId == null
+                ? 'Nog geen guild'
+                : 'Guild ID: ${me.guildId}'),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -131,7 +152,8 @@ class _GuildCard extends ConsumerWidget {
                   ),
                 ] else
                   TextButton(
-                    onPressed: () => ref.read(fsUserRepoProvider).leaveGuild(me.id),
+                    onPressed: () =>
+                        ref.read(fsUserRepoProvider).leaveGuild(me.id),
                     child: const Text('Leave guild'),
                   ),
               ],
@@ -142,39 +164,52 @@ class _GuildCard extends ConsumerWidget {
     );
   }
 
-  Future<void> _openCreateGuildDialog(BuildContext context, WidgetRef ref, UserProfile me) async {
+  Future<void> _openCreateGuildDialog(
+      BuildContext context, WidgetRef ref, UserProfile me) async {
     if (me.guildId != null) return;
     final c = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Create guild'),
-        content:
-            TextField(controller: c, decoration: const InputDecoration(labelText: 'Guild name')),
+        content: TextField(
+            controller: c,
+            decoration: const InputDecoration(labelText: 'Guild name')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Create')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Create')),
         ],
       ),
     );
     if (ok != true || c.text.trim().isEmpty) return;
-    final gid =
-        await ref.read(fsUserRepoProvider).createGuildAndJoin(ownerUid: me.id, name: c.text.trim());
+    final gid = await ref
+        .read(fsUserRepoProvider)
+        .createGuildAndJoin(ownerUid: me.id, name: c.text.trim());
     await ref.read(shopRepoProvider).seedGuildShop(guildId: gid);
   }
 
-  Future<void> _openJoinDialog(BuildContext context, WidgetRef ref, UserProfile me) async {
+  Future<void> _openJoinDialog(
+      BuildContext context, WidgetRef ref, UserProfile me) async {
     if (me.guildId != null) return;
     final c = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Join guild'),
-        content:
-            TextField(controller: c, decoration: const InputDecoration(labelText: 'Invite code')),
+        content: TextField(
+            controller: c,
+            decoration: const InputDecoration(labelText: 'Invite code')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Join')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Join')),
         ],
       ),
     );
@@ -233,7 +268,8 @@ class _ThemeCard extends ConsumerWidget {
                       radius: 14,
                       backgroundColor: c,
                       child: state.seedColor.value == c.value
-                          ? const Icon(Icons.check, size: 14, color: Colors.white)
+                          ? const Icon(Icons.check,
+                              size: 14, color: Colors.white)
                           : null,
                     ),
                   ),
@@ -282,7 +318,8 @@ class _SkillXpCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Vaardigheden', style: Theme.of(context).textTheme.titleMedium),
+            Text('Vaardigheden',
+                style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 4),
             Text(
               'Verdien XP via persoonlijke taken. Tik op een skill voor de skill tree.',
@@ -295,7 +332,8 @@ class _SkillXpCard extends StatelessWidget {
                 xp: me.skillXp[skill] ?? 0,
                 onTap: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => SkillTreePage(skill: skill)),
+                  MaterialPageRoute(
+                      builder: (_) => SkillTreePage(skill: skill)),
                 ),
               ),
               const SizedBox(height: 8),
@@ -375,7 +413,8 @@ class _GuildLeaderboard extends ConsumerWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Samen deze week', style: Theme.of(context).textTheme.titleMedium),
+                Text('Samen deze week',
+                    style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 4),
                 Text('$together punten samen',
                     style: Theme.of(context).textTheme.bodyMedium),
@@ -426,13 +465,18 @@ class _ActivityCard extends ConsumerWidget {
           error: (e, _) => Text('Error: $e'),
           data: (events) {
             final users = usersAsync.value ?? const <UserProfile>[];
-            final nameById = <String, String>{for (final u in users) u.id: u.name};
-            final filtered = events.where((e) => _showTypes.contains(e.type)).toList();
-            if (filtered.isEmpty) return const Text('Nog geen activiteit samen.');
+            final nameById = <String, String>{
+              for (final u in users) u.id: u.name
+            };
+            final filtered =
+                events.where((e) => _showTypes.contains(e.type)).toList();
+            if (filtered.isEmpty)
+              return const Text('Nog geen activiteit samen.');
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Jullie activiteit', style: Theme.of(context).textTheme.titleMedium),
+                Text('Jullie activiteit',
+                    style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
                 SizedBox(
                   height: 260,
@@ -442,7 +486,8 @@ class _ActivityCard extends ConsumerWidget {
                       final e = filtered[i];
                       return ListTile(
                         dense: true,
-                        leading: Text(_eventEmoji(e.type), style: const TextStyle(fontSize: 18)),
+                        leading: Text(_eventEmoji(e.type),
+                            style: const TextStyle(fontSize: 18)),
                         title: Text(_eventLine(e, nameById)),
                         subtitle: Text(DateFormat('dd MMM HH:mm').format(e.at)),
                       );
@@ -490,21 +535,24 @@ class _ActivityCard extends ConsumerWidget {
   }
 
   String _eventEmoji(String t) => switch (t) {
-    'completed'            => '✅',
-    'claimed'              => '📌',
-    'unclaimed'            => '📤',
-    'claimed_all_future'   => '📌',
-    'unclaimed_all_future' => '📤',
-    'created_template'     => '➕',
-    'updated_template'     => '✏️',
-    'deleted_template'     => '🗑️',
-    'missed'               => '⚠️',
-    'purchased_item'       => '🛍️',
-    'group_completed'      => '🎉',
-    _                      => '📝',
-  };
+        'completed' => '✅',
+        'claimed' => '📌',
+        'unclaimed' => '📤',
+        'claimed_all_future' => '📌',
+        'unclaimed_all_future' => '📤',
+        'created_template' => '➕',
+        'updated_template' => '✏️',
+        'deleted_template' => '🗑️',
+        'missed' => '⚠️',
+        'purchased_item' => '🛍️',
+        'group_completed' => '🎉',
+        _ => '📝',
+      };
 }
 
-final _eventsProvider = StreamProvider.autoDispose.family<List<TaskEvent>, String>((ref, gid) {
-  return ref.read(taskMvpRepoProvider).watchRecentEvents(guildId: gid, limit: 80);
+final _eventsProvider =
+    StreamProvider.autoDispose.family<List<TaskEvent>, String>((ref, gid) {
+  return ref
+      .read(taskMvpRepoProvider)
+      .watchRecentEvents(guildId: gid, limit: 80);
 });

@@ -42,7 +42,8 @@ class GlowProgressBar extends StatelessWidget {
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Container(
-                      width: v == 0 ? 0 : (v * MediaQuery.of(context).size.width),
+                      width:
+                          v == 0 ? 0 : (v * MediaQuery.of(context).size.width),
                       height: height,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(12),
@@ -75,5 +76,3 @@ class GlowProgressBar extends StatelessWidget {
     );
   }
 }
-
-
