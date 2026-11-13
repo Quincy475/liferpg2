@@ -108,10 +108,18 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
             child: Row(
               children: [
-                Expanded(child: StatTile(value: '$total', label: 'items')),
+                Expanded(
+                  child: StatTile(
+                    icon: Icons.inventory_2_outlined,
+                    value: '$total',
+                  ),
+                ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: StatTile(value: '${items.length}', label: 'soorten'),
+                  child: StatTile(
+                    icon: Icons.category_outlined,
+                    value: '${items.length}',
+                  ),
                 ),
               ],
             ),
