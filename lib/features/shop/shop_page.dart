@@ -70,9 +70,10 @@ class _ShopPageState extends ConsumerState<ShopPage> {
             error: (e, _) => Center(child: Text('Error: $e')),
             data: (me) {
               if (me == null || me.guildId == null) {
-                return const Center(
-                    child:
-                        Text('Maak of join eerst een koppel via het Profiel.'));
+                return Center(
+                    child: Icon(Icons.link,
+                        size: 40,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant));
               }
               final guildId = me.guildId!;
               final itemsAsync = ref.watch(guildShopItemsProvider(guildId));
@@ -116,12 +117,17 @@ class _ShopPageState extends ConsumerState<ShopPage> {
             child: Row(
               children: [
                 Expanded(
-                    child: StatTile(value: '${me.coins}', label: 'jouw coins')),
+                  child: StatTile(
+                    icon: Icons.toll,
+                    iconColor: Theme.of(context).colorScheme.tertiary,
+                    value: '${me.coins}',
+                  ),
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: StatTile(
+                    icon: Icons.shopping_bag_outlined,
                     value: '$affordable/${items.length}',
-                    label: 'kun je nu kopen',
                   ),
                 ),
               ],
@@ -161,8 +167,7 @@ class _ShopPageState extends ConsumerState<ShopPage> {
                         size: 40,
                         color: Theme.of(context).colorScheme.onSurfaceVariant),
                     const SizedBox(height: 10),
-                    const Text('Nog geen shop-items. Voeg er een toe met +.',
-                        textAlign: TextAlign.center),
+                    const Icon(Icons.add, size: 22),
                   ],
                 ),
               ),
@@ -203,12 +208,22 @@ class _ShopPageState extends ConsumerState<ShopPage> {
     final yes = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Aankoop bevestigen'),
-        content: Text('${item.name} kopen voor ${item.price} coins?'),
+        title: Text(item.name),
+        content: Row(
+          children: [
+            Icon(Icons.toll, size: 20, color: Theme.of(c).colorScheme.tertiary),
+            const SizedBox(width: 8),
+            Text('${item.price}',
+                style: Theme.of(c)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(color: Theme.of(c).colorScheme.tertiary)),
+          ],
+        ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(c, false),
-              child: const Text('Annuleer')),
+              child: const Icon(Icons.close)),
           FilledButton(
               onPressed: () => Navigator.pop(c, true),
               child: const Text('Koop')),
@@ -229,7 +244,7 @@ class _ShopPageState extends ConsumerState<ShopPage> {
     if (!context.mounted) return;
     if (!ok) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Aankoop mislukt.')));
+          .showSnackBar(const SnackBar(content: Text('Mislukt')));
       return;
     }
     await ref
@@ -243,7 +258,7 @@ class _ShopPageState extends ConsumerState<ShopPage> {
         );
     if (!context.mounted) return;
     ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('${item.name} gekocht.')));
+        .showSnackBar(SnackBar(content: Text('\u2713 ${item.name}')));
   }
 
   Future<void> _openItemDialog(
@@ -489,9 +504,7 @@ class _ShopItemCard extends StatelessWidget {
                                   visualDensity: VisualDensity.compact),
                               onPressed: () =>
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                    content:
-                                        Text('Je mist nog $missing coins.')),
+                                SnackBar(content: Text('\u2212$missing')),
                               ),
                               icon: const Icon(Icons.lock_outline, size: 18),
                               label: Text('Nog $missing'),

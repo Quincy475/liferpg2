@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:household_rpg/app/session_providers.dart';
-import 'package:household_rpg/data/local/hive_boxes.dart';
 import 'package:household_rpg/data/models/models.dart';
 import 'package:household_rpg/data/repositories/task_mvp_repo.dart';
 import 'package:household_rpg/data/repositories/personal_task_repo.dart';
@@ -108,7 +107,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.calendar ? 'Kalender' : 'Deze week'),
+        title: Text(widget.calendar ? 'Kalender' : 'Week'),
         actions: [
           if (meAsync.value != null) CoinChip(coins: meAsync.value!.coins),
           IconButton(
@@ -315,8 +314,8 @@ class _TasksPageState extends ConsumerState<TasksPage> {
           .completeInstance(uid: uid, instanceId: instanceId);
       ref.invalidate(_personalWeekInstancesProvider);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Persoonlijke taak voltooid + XP + solo coins.')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('\u2713 +XP +coins')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -594,14 +593,15 @@ class _TasksPageState extends ConsumerState<TasksPage> {
       child: Column(
         children: [
           SegmentedButton<AppMode>(
+            showSelectedIcon: false,
             segments: const [
               ButtonSegment(
                   value: AppMode.guild,
-                  label: Text('Samen'),
+                  tooltip: 'Samen',
                   icon: Icon(Icons.group, size: 16)),
               ButtonSegment(
                   value: AppMode.personal,
-                  label: Text('Persoonlijk'),
+                  tooltip: 'Persoonlijk',
                   icon: Icon(Icons.person, size: 16)),
             ],
             selected: {mode},
@@ -639,9 +639,9 @@ class _TasksPageState extends ConsumerState<TasksPage> {
       child: Row(
         children: [
           chip('Open', TaskFilterMode.openClaimed),
-          chip('Van mij', TaskFilterMode.mine),
+          chip('Mijn', TaskFilterMode.mine),
           chip('Vrij', TaskFilterMode.unclaimed),
-          chip('Te laat', TaskFilterMode.late),
+          chip('Laat', TaskFilterMode.late),
           chip('Alle', TaskFilterMode.all),
         ],
       ),
@@ -750,8 +750,8 @@ class _TasksPageState extends ConsumerState<TasksPage> {
               ),
               if (quests.isNotEmpty) ...[
                 SliverToBoxAdapter(
-                    child: _SectionLabel(
-                        title: 'Coöp-quests', count: quests.length)),
+                    child:
+                        _SectionLabel(title: 'Quests', count: quests.length)),
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   sliver: SliverList.builder(
@@ -784,7 +784,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
               if (loose.isNotEmpty) ...[
                 SliverToBoxAdapter(
                   child: _SectionLabel(
-                    title: quests.isEmpty ? 'Taken' : 'Losse taken',
+                    title: 'Taken',
                     count: loose.length,
                   ),
                 ),
@@ -811,9 +811,13 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                 ),
               ],
               if (quests.isEmpty && loose.isEmpty)
-                const SliverFillRemaining(
+                SliverFillRemaining(
                   hasScrollBody: false,
-                  child: Center(child: Text('Geen taken voor deze week.')),
+                  child: Center(
+                      child: Icon(Icons.event_available_outlined,
+                          size: 40,
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant)),
                 ),
               const SliverToBoxAdapter(child: SizedBox(height: 24)),
             ],
@@ -976,8 +980,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
       ref.invalidate(_weekInstancesProvider);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(
-            claimAll ? 'Alle toekomstige taken geclaimd.' : 'Task geclaimd.'),
+        content: Text(claimAll ? '\u2713 Alles geclaimd' : '\u2713 Geclaimd'),
       ));
     } catch (e) {
       if (!mounted) return;
@@ -1032,9 +1035,8 @@ class _TasksPageState extends ConsumerState<TasksPage> {
       ref.invalidate(_weekInstancesProvider);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(unclaimAll
-            ? 'Alle toekomstige taken unclaimed.'
-            : 'Task unclaimed.'),
+        content:
+            Text(unclaimAll ? '\u2713 Alles losgelaten' : 'Task unclaimed.'),
       ));
     } catch (e) {
       if (!mounted) return;
@@ -1049,8 +1051,8 @@ class _TasksPageState extends ConsumerState<TasksPage> {
           guildId: guildId, instanceId: instanceId, userId: meId);
       ref.invalidate(_weekInstancesProvider);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Task voltooid + coins.')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('\u2713 Klaar')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -1426,127 +1428,6 @@ final _coopGroupsProvider =
   return ref.read(taskMvpRepoProvider).watchGroups(gid);
 });
 
-/// Paneel met de coöp-quests (taakgroepen) en hun gezamenlijke voortgang.
-class _CoopQuestsPanel extends ConsumerStatefulWidget {
-  final String guildId;
-  final DateTime weekStart;
-  final DateTime weekEnd;
-  const _CoopQuestsPanel({
-    required this.guildId,
-    required this.weekStart,
-    required this.weekEnd,
-  });
-
-  @override
-  ConsumerState<_CoopQuestsPanel> createState() => _CoopQuestsPanelState();
-}
-
-class _CoopQuestsPanelState extends ConsumerState<_CoopQuestsPanel> {
-  static const _prefKey = 'coop_panel_expanded';
-  late bool _expanded;
-
-  @override
-  void initState() {
-    super.initState();
-    final saved = appBox.get(_prefKey);
-    _expanded = saved is bool ? saved : false;
-  }
-
-  void _toggle() {
-    setState(() => _expanded = !_expanded);
-    appBox.put(_prefKey, _expanded);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final guildId = widget.guildId;
-    final groups =
-        ref.watch(_coopGroupsProvider(guildId)).value ?? const <TaskGroup>[];
-    if (groups.isEmpty) return const SizedBox.shrink();
-    final instances = ref
-            .watch(_weekInstancesProvider((
-              guildId: guildId,
-              start: widget.weekStart,
-              end: widget.weekEnd,
-            )))
-            .value ??
-        const <TaskInstance>[];
-
-    final theme = Theme.of(context);
-    final inGroups = instances.where((i) => i.groupId != null).toList();
-    final doneSubtasks =
-        inGroups.where((i) => i.status == TaskInstanceStatus.completed).length;
-    final doneQuests = groups.where((g) {
-      final mine = instances.where((i) => i.groupId == g.id).toList();
-      return mine.isNotEmpty &&
-          mine.every((i) => i.status == TaskInstanceStatus.completed);
-    }).length;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: _toggle,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Row(
-                children: [
-                  Text('Coöp-quests samen', style: theme.textTheme.titleSmall),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '$doneQuests/${groups.length} klaar · $doneSubtasks/${inGroups.length} subtaken',
-                      style: theme.textTheme.bodySmall,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  AnimatedRotation(
-                    turns: _expanded ? 0 : -0.25,
-                    duration: const Duration(milliseconds: 200),
-                    child: Icon(
-                      Icons.expand_more,
-                      semanticLabel: _expanded ? 'Inklappen' : 'Uitklappen',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          AnimatedSize(
-            duration: const Duration(milliseconds: 200),
-            alignment: Alignment.topCenter,
-            child: _expanded
-                ? ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 280),
-                    child: ListView(
-                      shrinkWrap: true,
-                      padding: EdgeInsets.zero,
-                      children: [
-                        for (final g in groups)
-                          _CoopGroupCard(
-                            group: g,
-                            instances: instances
-                                .where((i) => i.groupId == g.id)
-                                .toList(),
-                            onDelete: () => _deleteGroupFlow(
-                                context, ref, widget.guildId, g),
-                            onEdit: () =>
-                                _editGroupFlow(context, ref, widget.guildId, g),
-                          ),
-                      ],
-                    ),
-                  )
-                : const SizedBox(width: double.infinity),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 Future<void> _deleteGroupFlow(
     BuildContext context, WidgetRef ref, String guildId, TaskGroup g) async {
   final me = ref.read(currentUserProvider).value;
@@ -1622,71 +1503,6 @@ Future<void> _editGroupFlow(
       );
 }
 
-class _CoopGroupCard extends StatelessWidget {
-  final TaskGroup group;
-  final List<TaskInstance> instances;
-  final VoidCallback onDelete;
-  final VoidCallback onEdit;
-  const _CoopGroupCard({
-    required this.group,
-    required this.instances,
-    required this.onDelete,
-    required this.onEdit,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final total = instances.length;
-    final done =
-        instances.where((i) => i.status == TaskInstanceStatus.completed).length;
-    final progress = total == 0 ? 0.0 : done / total;
-    final complete = total > 0 && done == total;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    complete ? '🎉 ${group.title}' : group.title,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                PopupMenuButton<String>(
-                  onSelected: (v) => v == 'delete' ? onDelete() : onEdit(),
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'edit', child: Text('Bewerken')),
-                    PopupMenuItem(value: 'delete', child: Text('Verwijderen')),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: LinearProgressIndicator(
-                value: total == 0 ? 0 : progress,
-                minHeight: 8,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              complete
-                  ? 'Samen afgerond! ($done/$total subtaken)'
-                  : '$done/$total subtaken klaar deze week',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _BoardList extends StatelessWidget {
   final List<TaskInstance> instances;
   final String meId;
@@ -1709,7 +1525,9 @@ class _BoardList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (instances.isEmpty)
-      return const Center(child: Text('Geen tasks voor deze week.'));
+      return Center(
+          child: Icon(Icons.event_available_outlined,
+              size: 40, color: Theme.of(context).colorScheme.onSurfaceVariant));
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
@@ -1830,8 +1648,8 @@ class _PlannerView extends StatelessWidget {
         final bool highlight;
         final List<TaskInstance> items;
         if (p == 0) {
-          title = 'Hele week';
-          subtitle = 'Wekelijkse en maandelijkse taken';
+          title = 'Week';
+          subtitle = '';
           highlight = false;
           items = weekItems;
         } else {
@@ -1937,10 +1755,16 @@ class _PlannerPage extends StatelessWidget {
                     borderRadius: BorderRadius.circular(99),
                     border: Border.all(color: cs.outlineVariant),
                   ),
-                  child: Text(
-                    '${items.length} ${items.length == 1 ? 'taak' : 'taken'}',
-                    style: theme.textTheme.labelMedium
-                        ?.copyWith(color: cs.onSurfaceVariant),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.checklist,
+                          size: 14, color: cs.onSurfaceVariant),
+                      const SizedBox(width: 6),
+                      Text('${items.length}',
+                          style: theme.textTheme.labelMedium
+                              ?.copyWith(color: cs.onSurfaceVariant)),
+                    ],
                   ),
                 ),
               ],
@@ -1954,10 +1778,6 @@ class _PlannerPage extends StatelessWidget {
                       children: [
                         Icon(Icons.event_available_outlined,
                             size: 36, color: cs.onSurfaceVariant),
-                        const SizedBox(height: 8),
-                        Text('Niets gepland',
-                            style: theme.textTheme.bodyMedium
-                                ?.copyWith(color: cs.onSurfaceVariant)),
                       ],
                     ),
                   )
@@ -2022,9 +1842,10 @@ class _WeekStrip extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final now = DateTime.now();
-    final fmt = DateFormat('d MMM');
-    final label =
-        '${fmt.format(weekStart)} \u2013 ${fmt.format(weekStart.add(const Duration(days: 6)))}';
+    final end = weekStart.add(const Duration(days: 6));
+    final label = weekStart.month == end.month
+        ? '${weekStart.day}\u2013${end.day} ${_monthNl(end)}'
+        : '${weekStart.day} ${_monthNl(weekStart)} \u2013 ${end.day} ${_monthNl(end)}';
     final select = onSelectPage;
     const anim = Duration(milliseconds: 220);
 
@@ -2060,11 +1881,22 @@ class _WeekStrip extends StatelessWidget {
                                     ? cs.primary
                                     : cs.outlineVariant),
                           ),
-                          child: Text('Hele week \u00b7 $label',
-                              style: theme.textTheme.bodySmall?.copyWith(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.date_range,
+                                  size: 14,
                                   color: selectedPage == 0
                                       ? cs.onPrimary
-                                      : cs.onSurfaceVariant)),
+                                      : cs.onSurfaceVariant),
+                              const SizedBox(width: 6),
+                              Text(label,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                      color: selectedPage == 0
+                                          ? cs.onPrimary
+                                          : cs.onSurfaceVariant)),
+                            ],
+                          ),
                         ),
                       ),
               ),
@@ -2161,12 +1993,17 @@ class _StatsRow extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       child: Row(
         children: [
-          Expanded(child: StatTile(value: '$together', label: 'punten samen')),
+          Expanded(
+              child: StatTile(
+                  icon: Icons.bolt,
+                  iconColor: Theme.of(context).colorScheme.primary,
+                  value: '$together')),
           const SizedBox(width: 8),
           Expanded(
             child: StatTile(
+              icon: Icons.check_circle_outline,
+              iconColor: Theme.of(context).colorScheme.secondary,
               value: quest.isEmpty ? '\u2013' : '$questDone/${quest.length}',
-              label: 'quest-taken klaar',
             ),
           ),
         ],
@@ -2205,19 +2042,15 @@ class _TaskCard extends StatelessWidget {
     final isClaimedByMe = i.claimedByUserId == meId;
     final done = i.status == TaskInstanceStatus.completed;
 
-    final (statusLabel, statusColor) = switch (i.status) {
-      TaskInstanceStatus.open => ('Open', cs.primary),
-      TaskInstanceStatus.claimed => ('Geclaimd', cs.tertiary),
-      TaskInstanceStatus.completed => ('Klaar', cs.secondary),
-      TaskInstanceStatus.missed => ('Gemist', cs.error),
-      TaskInstanceStatus.expired => ('Verlopen', cs.onSurfaceVariant),
+    final (statusIcon, statusColor) = switch (i.status) {
+      TaskInstanceStatus.open => (Icons.radio_button_unchecked, cs.primary),
+      TaskInstanceStatus.claimed => (Icons.timelapse, cs.tertiary),
+      TaskInstanceStatus.completed => (Icons.check_circle, cs.secondary),
+      TaskInstanceStatus.missed => (Icons.cancel_outlined, cs.error),
+      TaskInstanceStatus.expired => (Icons.block, cs.onSurfaceVariant),
     };
-
-    final subtitle = [
-      'Deadline ${_dayNl(i.dueAt)} ${DateFormat('HH:mm').format(i.dueAt)}',
-      if (showClaim && i.claimedByUserId != null)
-        (isClaimedByMe ? 'Jij' : 'Partner'),
-    ].join(' \u00b7 ');
+    final muted =
+        theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant);
 
     return AnimatedOpacity(
       duration: const Duration(milliseconds: 300),
@@ -2262,12 +2095,24 @@ class _TaskCard extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(height: 2),
-                            Text(
-                              subtitle,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodySmall
-                                  ?.copyWith(color: cs.onSurfaceVariant),
+                            Row(
+                              children: [
+                                Icon(Icons.schedule,
+                                    size: 13, color: cs.onSurfaceVariant),
+                                const SizedBox(width: 4),
+                                Text(
+                                    '${_dayNl(i.dueAt)} ${DateFormat('HH:mm').format(i.dueAt)}',
+                                    style: muted),
+                                if (showClaim && i.claimedByUserId != null) ...[
+                                  const SizedBox(width: 10),
+                                  Icon(
+                                      isClaimedByMe
+                                          ? Icons.person
+                                          : Icons.person_outline,
+                                      size: 14,
+                                      color: cs.onSurfaceVariant),
+                                ],
+                              ],
                             ),
                           ],
                         ),
@@ -2280,9 +2125,11 @@ class _TaskCard extends StatelessWidget {
                               style: theme.textTheme.titleSmall
                                   ?.copyWith(color: cs.tertiary)),
                           if (showClaim)
-                            Text(statusLabel,
-                                style: theme.textTheme.labelSmall
-                                    ?.copyWith(color: statusColor)),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Icon(statusIcon,
+                                  size: 16, color: statusColor),
+                            ),
                         ],
                       ),
                     ],
@@ -2292,22 +2139,28 @@ class _TaskCard extends StatelessWidget {
                     Row(
                       children: [
                         if (showClaim && canClaim)
-                          TextButton(
-                            style: TextButton.styleFrom(
-                                visualDensity: VisualDensity.compact),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            tooltip: isClaimedByMe ? 'Laat los' : 'Claim',
                             onPressed: () => isClaimedByMe
                                 ? onUnclaim(i.id, i.templateId)
                                 : onClaim(i.id, i.templateId),
-                            child: Text(isClaimedByMe ? 'Laat los' : 'Claim'),
+                            icon: Icon(isClaimedByMe
+                                ? Icons.person_remove_outlined
+                                : Icons.person_add_alt_1_outlined),
                           ),
                         const Spacer(),
                         if (canComplete)
-                          FilledButton.icon(
-                            style: FilledButton.styleFrom(
-                                visualDensity: VisualDensity.compact),
-                            onPressed: () => onComplete(i.id),
-                            icon: const Icon(Icons.check, size: 18),
-                            label: const Text('Klaar'),
+                          Tooltip(
+                            message: 'Klaar',
+                            child: FilledButton(
+                              style: FilledButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 22)),
+                              onPressed: () => onComplete(i.id),
+                              child: const Icon(Icons.check, size: 20),
+                            ),
                           ),
                       ],
                     ),
@@ -2475,10 +2328,14 @@ class _QuestCardState extends State<_QuestCard> {
                   if (widget.group.bonusCoins > 0)
                     Padding(
                       padding: const EdgeInsets.only(top: 6, right: 8),
-                      child: Text(
-                        'Samen afronden: +${widget.group.bonusCoins} coins voor jullie allebei',
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: cs.onSurfaceVariant),
+                      child: Row(
+                        children: [
+                          Icon(Icons.toll, size: 14, color: cs.tertiary),
+                          const SizedBox(width: 4),
+                          Text('+${widget.group.bonusCoins}',
+                              style: theme.textTheme.bodySmall
+                                  ?.copyWith(color: cs.tertiary)),
+                        ],
                       ),
                     ),
                 ],
@@ -2533,8 +2390,7 @@ class _SubtaskRow extends StatelessWidget {
     final who = i.claimedByUserId == null
         ? null
         : (i.claimedByUserId == meId ? 'Jij' : 'Partner');
-    final sub =
-        done ? (who == null ? 'Klaar' : 'Klaar \u00b7 $who') : (who ?? 'Open');
+    final mine = i.claimedByUserId == meId;
 
     return InkWell(
       onTap: onOpen,
@@ -2576,9 +2432,9 @@ class _SubtaskRow extends StatelessWidget {
                         decoration: done ? TextDecoration.lineThrough : null,
                       ),
                     ),
-                    Text(sub,
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: cs.onSurfaceVariant)),
+                    if (who != null)
+                      Icon(mine ? Icons.person : Icons.person_outline,
+                          size: 14, color: cs.onSurfaceVariant),
                   ],
                 ),
               ),

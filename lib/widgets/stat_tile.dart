@@ -1,16 +1,25 @@
 import 'package:flutter/material.dart';
 
-/// Grote waarde met label in een kaartje (bento-tegel).
+/// Grote waarde met icoon (of kort label) in een kaartje (bento-tegel).
 class StatTile extends StatelessWidget {
   final String value;
-  final String label;
-  const StatTile({super.key, required this.value, required this.label});
+  final String? label;
+  final IconData? icon;
+  final Color? iconColor;
+  const StatTile({
+    super.key,
+    required this.value,
+    this.label,
+    this.icon,
+    this.iconColor,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainer,
         borderRadius: BorderRadius.circular(16),
@@ -19,12 +28,20 @@ class StatTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(value,
-              style: theme.textTheme.headlineSmall
-                  ?.copyWith(fontWeight: FontWeight.w500)),
-          Text(label,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          Row(
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 22, color: iconColor ?? muted),
+                const SizedBox(width: 8),
+              ],
+              Text(value,
+                  style: theme.textTheme.headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.w500)),
+            ],
+          ),
+          if (label != null)
+            Text(label!,
+                style: theme.textTheme.bodySmall?.copyWith(color: muted)),
         ],
       ),
     );
